@@ -21,6 +21,7 @@ def sync_markets(session, client: KalshiClient | None = None) -> int:
         if market is None:
             market = Market(ticker=incoming.ticker)
             session.add(market)
+            existing[incoming.ticker] = market
 
         market.event_ticker = incoming.event_ticker
         market.series_ticker = incoming.series_ticker

@@ -49,3 +49,17 @@ def test_sync_is_idempotent(session):
         sync_markets(session, client=_client([M]))
 
     assert session.query(Market).count() == 1
+
+
+def test_sync_dedupes_duplicate_ticker_within_one_fetch(session):
+    """Pagination boundary overlap could return the same ticker twice in one fetch.
+
+    Without deduping against markets created earlier in the same loop, the
+    second occurrence would try to INSERT a second row with the same primary
+    key, raising IntegrityError and killing the whole sync run.
+    """
+    with patch("app.jobs.sync_markets.embed_texts", return_value=[[0.3] * 1536, [0.3] * 1536]):
+        count = sync_markets(session, client=_client([M, M]))
+
+    assert count == 2
+    assert session.query(Market).count() == 1

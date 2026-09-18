@@ -75,3 +75,27 @@ def test_embed_texts_batches_correctly_at_boundary():
 
 def test_embed_texts_returns_empty_for_empty_input():
     assert embed_texts([]) == []
+
+
+def test_embed_texts_raises_on_short_response():
+    """A response with fewer items than the batch sent must raise loudly.
+
+    Silently truncating (e.g. via zip at the call site) would leave the
+    tail markets with a stale or missing embedding and no error — this
+    guards against that at the source.
+    """
+    fake = MagicMock()
+    fake.data = [MagicMock(embedding=[0.1] * 1536, index=0),
+                 MagicMock(embedding=[0.2] * 1536, index=1)]
+    with patch("app.embeddings._client") as client:
+        client.embeddings.create.return_value = fake
+        try:
+            embed_texts(["a", "b", "c"])
+            raised = False
+        except RuntimeError as exc:
+            raised = True
+            message = str(exc)
+
+    assert raised, "expected RuntimeError when response has fewer items than the batch"
+    assert "3" in message
+    assert "2" in message
