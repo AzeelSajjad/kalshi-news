@@ -117,7 +117,7 @@ read the output for errors before continuing.
 
 Everything up to this point has been verified against tests and recorded
 payloads. This is the first time the pipeline runs against **live, real**
-Kalshi and RSS data. Run the three jobs in this exact order — each depends
+Kalshi and RSS data. Run the four jobs in this exact order — each depends
 on rows the previous one wrote — and check the database after each one.
 
 ```bash
@@ -160,6 +160,37 @@ curl -X POST "$API/api/jobs/link" -H "X-Job-Token: $JOB_TOKEN" --max-time 120
 ```bash
 psql "$DB" -c "select count(*) from post_markets;"
 ```
+
+**4. Impact — and why the demo needs a day before you share it:**
+
+```bash
+curl -X POST "$API/api/jobs/impact" -H "X-Job-Token: $JOB_TOKEN" --max-time 120
+```
+
+Expect this to fill **nothing** the first time, and that is correct.
+`app/jobs/impact.py` skips any link younger than an hour, because a "how
+far did it move in the first hour" number cannot exist before an hour has
+passed. So immediately after the first `link` run, every `price_delta` in
+the API is `null`, and the observed-move badge — the single most compelling
+element of the whole demo, the thing that turns "this news relates to this
+market" into "this news moved this market" — renders **nowhere**.
+
+Deltas start appearing about an hour after the first `link` run and fill
+out over the following 24 hours as the hourly cron keeps calling `impact`.
+Check progress with:
+
+```bash
+psql "$DB" -c "select count(*) from post_markets where price_1h is not null;"
+```
+
+`0` an hour or more after the first `link` run, with `post_markets > 0`,
+means candlesticks aren't coming back for these tickers — check
+`job_runs.error` for the `impact` job. Anything above `0` means the badge
+is live.
+
+**Deploy a day before you send anyone the URL.** A site opened an hour
+after deploy is a correct site showing its least interesting face, and a
+recruiter only opens the link once.
 
 ### Read this before you touch Step 5
 
@@ -247,7 +278,9 @@ push a commit or re-enable it manually from the Actions tab to restart it.
 4. Deploy.
 5. **Verify:** open the deployed URL. The feed should render populated
    posts, not an empty state. If Step 4's checkpoint passed cleanly, each
-   post should also show at least one linked market.
+   post should also show at least one linked market. Market tags will carry
+   **no observed-move badge yet** — see Step 4.4; that is expected for the
+   first hour and is not a deploy failure.
 
 ## If it's broken
 
@@ -258,6 +291,12 @@ push a commit or re-enable it manually from the Actions tab to restart it.
   from post_markets;` is `0`. This is the Step 4 checkpoint failure; go
   back and work through that section, starting with `job_runs.error` for
   the `link` job.
+- **Markets show but no observed-move badge, hours after deploy** —
+  `select count(*) from post_markets where price_1h is not null;` is still
+  `0`. Confirm the `impact` job is actually running (`select job, status,
+  items_processed, error from job_runs where job = 'impact' order by
+  started_at desc limit 5;`). An hourly job that has never run means the
+  GitHub Actions cron is off — see Step 5.
 - **Frontend shows a 502/504, or an error page mentioning the backend** —
   `BACKEND_API_URL` is wrong, or Railway is asleep or crashed. Run `curl
   https://<railway-domain>/health` directly: anything other than
