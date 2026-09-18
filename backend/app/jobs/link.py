@@ -103,10 +103,22 @@ def _link_post(session, post: Post, representative: Post | None = None) -> tuple
             # attempt 1 (or later) was a real, billed call even though this
             # call never returns a VerificationResult -- record it before
             # letting the failure fall through to per-post isolation below.
-            record_spend(session, estimate_cost(exc.input_tokens, exc.output_tokens))
+            # Zero tokens means the very first attempt failed before any
+            # usage was billed, so there is nothing to record.
+            if exc.input_tokens or exc.output_tokens:
+                record_spend(session, estimate_cost(exc.input_tokens, exc.output_tokens))
             raise
 
-        record_spend(session, estimate_cost(result.input_tokens, result.output_tokens))
+        # No candidates means verify_candidates short-circuited without an
+        # LLM call -- (links=[], input_tokens=0, output_tokens=0) by
+        # construction -- and most posts match nothing, so recording spend
+        # unconditionally here would run a pointless SELECT + UPDATE +
+        # COMMIT on the large majority of posts. A billed call that simply
+        # found nothing related still has nonzero tokens and must still be
+        # recorded (see test_spend_is_recorded_even_when_the_verifier_finds_
+        # nothing_related).
+        if result.input_tokens or result.output_tokens:
+            record_spend(session, estimate_cost(result.input_tokens, result.output_tokens))
 
         written = 0
         seen_tickers: set[str] = set()

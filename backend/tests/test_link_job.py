@@ -93,6 +93,27 @@ def test_spend_is_recorded_even_when_the_verifier_finds_nothing_related(session)
     assert session.query(Post).one().linked_at is not None
 
 
+def test_record_spend_is_skipped_when_no_candidates_were_found(session):
+    """No candidates means verify_candidates short-circuits without an LLM
+    call, returning (links=[], input_tokens=0, output_tokens=0) -- calling
+    record_spend anyway is a pointless SELECT + UPDATE + COMMIT on the
+    large majority of posts, since most posts match nothing."""
+    source = Source(kind="rss", name="Politico", feed_url="u", category="Politics")
+    session.add(source)
+    session.flush()
+    session.add(Post(source_id=source.id, external_id="p1", url="u",
+                     title="Shutdown talks collapse", published_at=NOW))
+    session.commit()
+
+    with patch("app.jobs.link.embed_texts", return_value=[[1.0] + [0.0] * 1535]), \
+         patch("app.jobs.link.record_spend") as spend:
+        written = run_link(session)
+
+    assert written == 0
+    spend.assert_not_called()
+    assert session.query(LlmSpend).count() == 0
+
+
 def test_exhausted_budget_pauses_linking_without_error(session):
     _setup(session)
     with patch("app.jobs.link.embed_texts", return_value=[[1.0] + [0.0] * 1535]), \
