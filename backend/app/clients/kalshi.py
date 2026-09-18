@@ -36,11 +36,8 @@ def _parse_ts(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
 
-def _midpoint(bid, ask) -> int | None:
-    if bid is None and ask is None:
-        return None
-    if bid is None or ask is None:
-        return bid if ask is None else ask
+def _midpoint(bid: int, ask: int) -> int:
+    """The mid of a two-sided quote. Callers must establish both sides first."""
     return round((bid + ask) / 2)
 
 
@@ -119,9 +116,16 @@ def _price_cents(raw: dict) -> int | None:
     """yes_price, in integer cents.
 
     1. last_price when present and > 0 (a real trade happened).
-    2. else the bid/ask midpoint when at least one side is non-zero (a live quote exists).
-    3. else None -- an untraded market with no two-sided quote shows no price rather than a
-       confident-looking midpoint of a 0/1.00 spread nobody would trade at.
+    2. else the bid/ask midpoint, but only for a *genuinely two-sided* quote --
+       both sides present and non-zero.
+    3. else None.
+
+    "At least one side non-zero" was not good enough. On a thin market the
+    book has priced as a near-certain NO, bid=0 / ask=97 is ordinary, and the
+    midpoint of that is 48c -- a confident-looking number on a market nobody
+    is bidding on, which then renders on a card as fact. One side of a quote
+    is not a price; it is half of one. Absence of a price is honest, and both
+    the card and the trending rail already render nothing for it.
     """
     last = _price_field_cents(raw, "last_price_dollars", "last_price")
     if last is not None and last > 0:
@@ -129,7 +133,7 @@ def _price_cents(raw: dict) -> int | None:
 
     bid = _price_field_cents(raw, "yes_bid_dollars", "yes_bid")
     ask = _price_field_cents(raw, "yes_ask_dollars", "yes_ask")
-    if bid or ask:
+    if bid and ask:
         return _midpoint(bid, ask)
 
     return None

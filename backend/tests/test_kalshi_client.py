@@ -97,3 +97,49 @@ def test_a_transport_error_is_retried_up_to_three_attempts(_sleep):
         KalshiClient().fetch_all_markets()
 
     assert route.call_count == 3
+
+
+# --- one-sided quotes ------------------------------------------------------
+#
+# The midpoint applies only when there is a genuine two-sided quote. With
+# bid=0 and ask=97 -- common on a thin market the book has priced as a
+# near-certain NO -- the old guard (`if bid or ask`) produced a confident-
+# looking 48c on a market nobody is bidding on, and that number then went
+# straight onto a card as fact.
+
+def _one_market(**overrides):
+    market = {
+        "ticker": "THIN-1", "event_ticker": "THIN", "title": "Thin market?",
+        "status": "active", "close_time": "2026-12-01T20:00:00Z",
+        "last_price": 0, "volume": 3,
+    }
+    market.update(overrides)
+    return {"markets": [market], "cursor": ""}
+
+
+def _price_for(**overrides):
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(
+            return_value=httpx.Response(200, json=_one_market(**overrides)))
+        return KalshiClient().fetch_all_markets()[0].yes_price
+
+
+def test_no_price_when_nobody_is_bidding():
+    assert _price_for(yes_bid=0, yes_ask=97) is None
+
+
+def test_no_price_when_nobody_is_offering():
+    assert _price_for(yes_bid=45, yes_ask=0) is None
+
+
+def test_no_price_when_a_side_is_absent_entirely():
+    assert _price_for(yes_ask=97) is None
+    assert _price_for(yes_bid=45) is None
+
+
+def test_midpoint_survives_for_a_genuine_two_sided_quote():
+    assert _price_for(yes_bid=45, yes_ask=47) == 46
+
+
+def test_a_real_last_trade_still_wins_over_a_one_sided_quote():
+    assert _price_for(yes_bid=0, yes_ask=97, last_price=93) == 93
