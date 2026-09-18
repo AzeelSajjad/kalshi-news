@@ -73,11 +73,21 @@ public RSS feed any more (`feeds.reuters.com` was retired; `apnews.com`
 answers feed URLs with a bot challenge). Politico, Bloomberg and CNBC are
 seeded enabled and verified working. Re-enabling either is a one-row `UPDATE`.
 
-## Deployment
+## Deploy
 
-`Procfile` at the repo root is what Railway needs to boot the backend. Set the
-environment variables above in the Railway project, point it at a Postgres
-instance with pgvector, and run `alembic upgrade head` once from `backend/`.
+The full, ordered path from empty accounts to a live public URL — Neon,
+migrations, Railway, the first live job run (with the checkpoint that
+matters most), GitHub Actions cron, and Vercel — is
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md). Every command in it is copy-pasteable.
+
+Running costs, once deployed:
+
+| Service | Cost |
+|---|---|
+| Vercel | free tier |
+| Neon | free tier |
+| Railway | ~$5/mo |
+| Anthropic + OpenAI (LLM + embeddings) | ~$15-30/mo |
 
 ## Jobs
 
