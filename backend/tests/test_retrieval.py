@@ -42,8 +42,12 @@ def test_returns_nearest_markets_ordered_by_distance(session):
     assert candidates[0].distance < candidates[1].distance
 
 
-def test_excludes_settled_and_expired_markets(session):
-    _market(session, "SETTLED", 1.0, status="settled")
+def test_excludes_markets_whose_close_time_has_passed(session):
+    """close_time is the sole liveness filter. A settled market is excluded
+    because Kalshi stops returning it from the open feed (so it stops being
+    refreshed) and because its close_time is in the past -- not because of
+    anything read off the status column, which is advisory only.
+    """
     _market(session, "EXPIRED", 1.0, close_in_days=-1)
     _market(session, "GOOD", 1.0)
     post = _post(session, 1.0)
@@ -68,3 +72,16 @@ def test_post_without_embedding_returns_nothing(session):
     session.commit()
 
     assert find_candidates(session, post) == []
+
+
+def test_a_market_synced_with_kalshis_own_status_value_is_still_a_candidate(session):
+    """Kalshi's /markets response reports a live market as status "active",
+    not "open" -- filtering candidates on status == "open" made the linker
+    inert against every real synced row while every hand-built test row
+    (status="open") kept passing. close_time is the authority for whether a
+    market is live; status is advisory only.
+    """
+    _market(session, "ACTIVE", 1.0, status="active")
+    post = _post(session, 1.0)
+
+    assert [c.ticker for c in find_candidates(session, post, max_distance=2.0)] == ["ACTIVE"]

@@ -120,8 +120,12 @@ def test_budget_is_rechecked_before_every_post_not_once_per_run(session):
                      title="Second shutdown story", published_at=NOW - timedelta(minutes=1)))
     session.commit()
 
-    # Budget is fine for the first post, exhausted by the second.
-    with patch("app.jobs.link.embed_texts", return_value=[[1.0] + [0.0] * 1535] * 2), \
+    # Two *different* stories: identical embeddings would put both posts in
+    # one cluster, and the second would then copy the first's links without
+    # an LLM call (and without a budget check), which is not what this test
+    # is about. An orthogonal vector keeps them in separate clusters.
+    with patch("app.jobs.link.embed_texts",
+               return_value=[[1.0] + [0.0] * 1535, [0.0, 1.0] + [0.0] * 1534]), \
          patch("app.jobs.link.budget_remaining", side_effect=[1.0, 0.0]), \
          patch("app.jobs.link.verify_candidates", return_value=_result([LINK])) as verify:
         written = run_link(session)
@@ -259,3 +263,83 @@ def test_job_run_recorded_as_ok_on_success(session):
     assert run.status == "ok"
     assert run.items_processed == 1
     assert run.finished_at is not None
+
+
+def test_a_post_that_matched_no_markets_stays_pending(session):
+    """linked_at must not become a permanent tombstone.
+
+    run_link only ever selects linked_at IS NULL and nothing clears it, so
+    stamping a post that reached no candidates -- and therefore made no LLM
+    call and learned nothing -- retires it forever. The cron runs link every
+    10 minutes and sync_markets every 15, so on a cold deploy the first link
+    run fires before a single market exists; that whole batch would render
+    untagged for the life of the deployment.
+
+    Re-retrieving these posts costs nothing: verify_candidates returns early
+    on an empty candidate list, so no Anthropic call is made.
+    """
+    source = Source(kind="rss", name="Politico", feed_url="u", category="Politics")
+    session.add(source)
+    session.flush()
+    session.add(Post(source_id=source.id, external_id="p1", url="u",
+                     title="Shutdown talks collapse", published_at=NOW))
+    session.commit()                      # deliberately: not one Market row exists
+
+    with patch("app.jobs.link.embed_texts", return_value=[[1.0] + [0.0] * 1535]), \
+         patch("app.jobs.link.verify_candidates", return_value=_result([], 0, 0)) as verify:
+        assert run_link(session) == 0
+
+    assert verify.call_args.args[1] == []
+    assert session.query(Post).one().linked_at is None
+
+
+def test_pending_posts_are_bounded_to_the_last_48_hours(session):
+    """Posts that matched nothing stay pending, so the pending set needs a
+    ceiling or it grows without limit and eventually every run re-embeds and
+    re-retrieves the entire archive."""
+    _setup(session)
+    source = session.query(Source).one()
+    session.add(Post(source_id=source.id, external_id="ancient", url="u2",
+                     title="Old shutdown story", published_at=NOW - timedelta(days=3)))
+    session.commit()
+
+    with patch("app.jobs.link.embed_texts", return_value=[[1.0] + [0.0] * 1535]), \
+         patch("app.jobs.link.verify_candidates", return_value=_result([LINK])) as verify:
+        run_link(session)
+
+    assert verify.call_count == 1
+    ancient = session.query(Post).filter_by(external_id="ancient").one()
+    assert ancient.linked_at is None
+    assert session.query(PostMarket).filter_by(post_id=ancient.id).count() == 0
+
+
+def test_two_posts_in_one_cluster_cost_one_llm_call_and_share_its_tags(session):
+    """The spec renders a cluster as one card with '+N sources' and links it
+    once. Six outlets on one story must not mean six identical Haiku calls
+    and six identical sets of tags computed from scratch."""
+    _setup(session)
+    source = session.query(Source).one()
+    session.add(Post(source_id=source.id, external_id="p2", url="u2",
+                     title="Shutdown talks break down, sources say",
+                     published_at=NOW - timedelta(minutes=1)))
+    session.commit()
+
+    # Identical embeddings put both posts in one cluster (assign_cluster's
+    # threshold is a cosine distance of 0.15).
+    vector = [1.0] + [0.0] * 1535
+    with patch("app.jobs.link.embed_texts", return_value=[vector, vector]), \
+         patch("app.jobs.link.verify_candidates", return_value=_result([LINK])) as verify:
+        written = run_link(session)
+
+    assert verify.call_count == 1, "the cluster's second post paid for its own LLM call"
+    assert written == 2
+
+    first, second = (session.query(Post).filter_by(external_id=eid).one()
+                     for eid in ("p1", "p2"))
+    assert first.cluster_id == second.cluster_id
+    assert second.linked_at is not None
+    for post in (first, second):
+        links = session.query(PostMarket).filter_by(post_id=post.id).all()
+        assert [link.ticker for link in links] == ["GOVSHUT-26OCT"]
+        assert links[0].direction == "YES"
+        assert links[0].rationale == LINK.rationale
