@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer,
@@ -27,7 +27,7 @@ class Cluster(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     representative_post_id: Mapped[int | None] = mapped_column(BigInteger)
     post_count: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Post(Base):
@@ -44,7 +44,7 @@ class Post(Base):
     body: Mapped[str | None] = mapped_column(Text)
     category: Mapped[str | None] = mapped_column(String(32))
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM))
     cluster_id: Mapped[int | None] = mapped_column(ForeignKey("clusters.id"))
     linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -65,7 +65,7 @@ class Market(Base):
     volume: Mapped[int | None] = mapped_column(BigInteger)
     text_hash: Mapped[str | None] = mapped_column(String(64))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class PostMarket(Base):
@@ -78,7 +78,7 @@ class PostMarket(Base):
     price_at_link: Mapped[int | None] = mapped_column(Integer)
     price_1h: Mapped[int | None] = mapped_column(Integer)
     price_24h: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     post: Mapped[Post] = relationship()
     market: Mapped[Market] = relationship()
 
@@ -90,7 +90,7 @@ class Subscriber(Base):
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String(32)))
     unsub_token: Mapped[str] = mapped_column(String(64), unique=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class JobRun(Base):
@@ -100,11 +100,11 @@ class JobRun(Base):
     status: Mapped[str] = mapped_column(String(16))            # running | ok | error
     items_processed: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class LlmSpend(Base):
     __tablename__ = "llm_spend"
     day: Mapped[date] = mapped_column(Date, primary_key=True)
-    usd: Mapped[float] = mapped_column(Numeric(10, 6), default=0)
+    usd: Mapped[float] = mapped_column(Numeric(10, 6, asdecimal=False), default=0)

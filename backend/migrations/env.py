@@ -27,7 +27,11 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# The URL is read from app.config.get_settings() and passed straight to the
+# engine/context below — never through config.set_main_option()/get_main_option().
+# Those delegate to ConfigParser, which treats "%" as the start of an
+# interpolation token; production URLs routinely percent-encode password
+# characters (e.g. "%40", "%2F"), which would raise InterpolationSyntaxError.
 
 
 def run_migrations_offline() -> None:
@@ -42,7 +46,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_settings().database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -65,6 +69,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        url=get_settings().database_url,
     )
 
     with connectable.connect() as connection:
