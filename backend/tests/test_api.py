@@ -222,6 +222,32 @@ def test_trending_rejects_limit_below_one(session):
     assert TestClient(app).get("/api/trending", params={"limit": 0}).status_code == 422
 
 
+def test_most_covered_only_counts_links_from_the_last_24h(session):
+    """The spec calls this "most covered today" -- a link recorded days ago
+    must not keep inflating the count forever."""
+    recent_post = _seed(session)  # GOVSHUT-26OCT link, created_at defaults to now
+
+    session.add(Market(ticker="OLD-MKT", title="Old story", status="open",
+                        close_time=NOW + timedelta(days=10), yes_price=50,
+                        volume=100, text_hash="h3"))
+    session.flush()
+    old_post = Post(source_id=recent_post.source_id, external_id="old1",
+                     url="https://politico.com/old", title="Old story broke",
+                     category="Politics", published_at=NOW - timedelta(hours=30))
+    session.add(old_post)
+    session.flush()
+    session.add(PostMarket(post_id=old_post.id, ticker="OLD-MKT", direction="YES",
+                            confidence=0.7, rationale="r", price_at_link=50,
+                            created_at=NOW - timedelta(hours=25)))
+    session.commit()
+
+    payload = TestClient(app).get("/api/trending").json()
+
+    tickers = [m["ticker"] for m in payload["most_covered"]]
+    assert "GOVSHUT-26OCT" in tickers   # link from just now: included
+    assert "OLD-MKT" not in tickers     # link from 25h ago: excluded
+
+
 def test_trending_excludes_markets_past_close_time_even_if_status_still_open(session):
     """status goes stale (Kalshi stops returning settled markets from its open
     feed), so a market whose close_time is in the past must be excluded from
