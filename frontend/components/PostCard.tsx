@@ -17,7 +17,16 @@ export function PostCard({ item }: { item: FeedItem }) {
   return (
     <article className="mb-2.5 rounded-xl border border-border bg-surface px-4 py-3.5">
       <div className="mb-2 flex items-center gap-2 text-[11px] text-muted">
-        {isX && <span className="rounded bg-[#1D9BF0] px-1.5 font-bold text-white">𝕏</span>}
+        {/* This chip used to be old Twitter blue -- a brand colour X retired,
+            and off our palette besides. X's own mark is black, which is
+            invisible against our background, so the chip takes the same
+            neutral surface treatment as the +N sources and category chips
+            beside it. */}
+        {isX && (
+          <span className="rounded border border-border bg-surface-2 px-1.5 font-bold text-text">
+            𝕏
+          </span>
+        )}
         <span className="font-semibold tracking-wide text-text">{byline}</span>
         <span>· {timeAgo(item.published_at)}</span>
         {item.cluster_size > 1 && (
