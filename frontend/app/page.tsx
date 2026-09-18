@@ -3,6 +3,7 @@ import { PostCard } from "@/components/PostCard";
 import { TrendingRail } from "@/components/TrendingRail";
 import { EmptyState } from "@/components/EmptyState";
 import { NewsletterButton } from "@/components/NewsletterButton";
+import { LoadMore } from "@/components/LoadMore";
 import { fetchFeed, fetchTrending } from "@/lib/api";
 
 export const revalidate = 60;
@@ -26,6 +27,9 @@ export default async function FeedPage({
           {feed.items.length === 0
             ? <EmptyState category={category ?? null} />
             : feed.items.map((item) => <PostCard key={item.id} item={item} />)}
+          {feed.next_cursor && (
+            <LoadMore initialCursor={feed.next_cursor} category={category} />
+          )}
         </main>
         <TrendingRail trending={trending} />
       </div>
