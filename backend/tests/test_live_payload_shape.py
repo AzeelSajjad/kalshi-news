@@ -99,3 +99,106 @@ def test_synced_markets_are_retrievable_regardless_of_status_value(session):
     assert find_candidates(session, post, max_distance=2.0), (
         "a freshly synced market was not retrievable — retrieval is coupled to status again"
     )
+
+
+def test_real_payload_yields_usable_prices_and_volume():
+    """The live API uses *_dollars and *_fp names; parsing must produce cents and ints."""
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    payload = {"markets": [{
+        "ticker": "TEST-1", "event_ticker": "TEST", "title": "A market?",
+        "rules_primary": "Resolves YES.", "status": "active",
+        "close_time": "2026-12-01T20:00:00Z",
+        "yes_bid_dollars": "0.6300", "yes_ask_dollars": "0.6500",
+        "last_price_dollars": "0.6400", "volume_fp": "2400000.00",
+    }], "cursor": ""}
+
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(return_value=httpx.Response(200, json=payload))
+        market = KalshiClient().fetch_all_markets()[0]
+
+    assert market.yes_price == 64, "last_price_dollars should win and convert to cents"
+    assert market.volume == 2400000
+
+
+def test_untraded_market_reports_no_price_rather_than_a_fake_midpoint():
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    payload = {"markets": [{
+        "ticker": "TEST-2", "event_ticker": "TEST", "title": "Untraded?",
+        "status": "active", "close_time": "2026-12-01T20:00:00Z",
+        "yes_bid_dollars": "0.0000", "yes_ask_dollars": "0.0000",
+        "last_price_dollars": "0.0000", "volume_fp": "0.00",
+    }], "cursor": ""}
+
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(return_value=httpx.Response(200, json=payload))
+        market = KalshiClient().fetch_all_markets()[0]
+
+    assert market.yes_price is None
+    assert market.volume == 0
+
+
+def test_midpoint_is_used_when_there_is_a_quote_but_no_last_trade():
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    payload = {"markets": [{
+        "ticker": "TEST-3", "event_ticker": "TEST", "title": "Quoted?",
+        "status": "active", "close_time": "2026-12-01T20:00:00Z",
+        "yes_bid_dollars": "0.4000", "yes_ask_dollars": "0.4400",
+        "last_price_dollars": "0.0000", "volume_fp": "10.00",
+    }], "cursor": ""}
+
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(return_value=httpx.Response(200, json=payload))
+        market = KalshiClient().fetch_all_markets()[0]
+
+    assert market.yes_price == 42
+
+
+def test_a_malformed_price_does_not_abort_the_sync():
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    payload = {"markets": [{
+        "ticker": "TEST-4", "event_ticker": "TEST", "title": "Broken?",
+        "status": "active", "close_time": "2026-12-01T20:00:00Z",
+        "yes_bid_dollars": "not-a-number", "volume_fp": None,
+    }], "cursor": ""}
+
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(return_value=httpx.Response(200, json=payload))
+        market = KalshiClient().fetch_all_markets()[0]
+
+    assert market.ticker == "TEST-4"
+    assert market.yes_price is None
+    assert market.volume is None
+
+
+def test_pagination_stops_when_the_cursor_repeats():
+    """A static cursor previously spun `while True` forever at 95% CPU."""
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    page = {"markets": [{"ticker": "T", "title": "t", "status": "active"}], "cursor": "same"}
+
+    with respx.mock:
+        route = respx.get(f"{BASE_URL}/markets").mock(
+            return_value=httpx.Response(200, json=page))
+        markets = KalshiClient().fetch_all_markets()
+
+    assert route.call_count == 2, "should send the cursor once, see it repeat, and stop"
+    assert len(markets) == 2
