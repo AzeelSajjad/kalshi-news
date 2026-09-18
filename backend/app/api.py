@@ -1,8 +1,9 @@
 import logging
+import secrets
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
@@ -43,6 +44,36 @@ UTM = "?utm_source=kalshi-news&utm_medium=referral&utm_campaign=feed"
 
 def kalshi_url(ticker: str) -> str:
     return f"https://kalshi.com/markets/{ticker}{UTM}"
+
+
+def _encode_cursor(post: Post) -> str:
+    """A keyset cursor: (published_at, id) instead of a bare timestamp.
+
+    A bare timestamp cursor with strict '<' silently and permanently drops
+    posts that share a published_at with the last item on a page (RSS feeds
+    routinely round to the minute; a batch ingest can stamp many posts
+    identically). Pairing the timestamp with the tie-broken, always-unique
+    id makes the ordering total, so every post is reachable exactly once.
+    """
+    return f"{post.published_at.isoformat()}|{post.id}"
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, int]:
+    try:
+        ts_part, id_part = cursor.rsplit("|", 1)
+        post_id = int(id_part)
+        ts = datetime.fromisoformat(ts_part)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid cursor") from exc
+    if ts.tzinfo is None:
+        # Comparing a naive datetime against a timestamptz column silently
+        # reinterprets it in the session's timezone -- contradicts the
+        # tz-aware-UTC rule the rest of the codebase follows, so reject it
+        # outright rather than let it produce a wrong, un-flagged answer.
+        raise HTTPException(
+            status_code=422, detail="cursor timestamp must be timezone-aware"
+        )
+    return ts, post_id
 
 
 def _price_delta(link: PostMarket) -> int | None:
@@ -135,20 +166,32 @@ def _assemble_items(
 
 
 @router.get("/api/feed", response_model=FeedPage)
-def feed(category: str | None = None, limit: int = Query(30, le=100), cursor: str | None = None):
+def feed(
+    category: str | None = None,
+    limit: int = Query(30, ge=1, le=100),
+    cursor: str | None = None,
+):
     with get_session() as session:
         query = (
             session.query(Post)
             .options(selectinload(Post.source))
-            .order_by(Post.published_at.desc())
+            .order_by(Post.published_at.desc(), Post.id.desc())
         )
         if category:
             query = query.filter(Post.category == category)
         if cursor:
-            query = query.filter(Post.published_at < datetime.fromisoformat(cursor))
-        posts = query.limit(limit).all()
+            cursor_ts, cursor_id = _decode_cursor(cursor)
+            query = query.filter(
+                tuple_(Post.published_at, Post.id) < tuple_(cursor_ts, cursor_id)
+            )
+        # Fetch one extra row so we know whether another page follows
+        # without a second COUNT query, and so an exactly-full page doesn't
+        # emit a next_cursor that leads to an empty page.
+        rows = query.limit(limit + 1).all()
+        has_more = len(rows) > limit
+        posts = rows[:limit]
         items = _assemble_items(session, posts, model=FeedItem)
-        next_cursor = posts[-1].published_at.isoformat() if len(posts) == limit else None
+        next_cursor = _encode_cursor(posts[-1]) if has_more else None
         return FeedPage(items=items, next_cursor=next_cursor)
 
 
@@ -167,7 +210,7 @@ def post_detail(post_id: int):
 
 
 @router.get("/api/trending", response_model=TrendingPage)
-def trending(limit: int = Query(10, le=50)):
+def trending(limit: int = Query(10, ge=1, le=50)):
     with get_session() as session:
         now = datetime.now(UTC)
         # status alone is not trustworthy: Kalshi stops returning settled
@@ -225,7 +268,9 @@ def run_job(job_name: str, x_job_token: str | None = Header(default=None)):
     # Fail closed: an unconfigured (blank) job_token must reject every
     # request rather than accept any. `not expected` covers that case
     # explicitly instead of relying on `"" != x_job_token` happening to work.
-    if not expected or x_job_token != expected:
+    # secrets.compare_digest instead of `!=` for the actual comparison: not
+    # a real exposure over an ASGI stack, but a no-downside upgrade.
+    if not expected or not x_job_token or not secrets.compare_digest(x_job_token, expected):
         raise HTTPException(status_code=401, detail="bad job token")
     job = JOBS.get(job_name)
     if job is None:
@@ -240,8 +285,11 @@ def run_job(job_name: str, x_job_token: str | None = Header(default=None)):
             # isolation (e.g. sync_markets' initial Kalshi fetch). Don't add
             # retry logic -- just don't let it escape as an opaque 500
             # traceback.
+            # type(exc).__name__ only, not str(exc): a SQLAlchemy error can
+            # carry the failing SQL and connection metadata in its message.
+            # logger.exception already captured the full detail server-side.
             logger.exception("job %s failed", job_name)
             raise HTTPException(
-                status_code=500, detail=f"job {job_name} failed: {exc}"
+                status_code=500, detail=f"job {job_name} failed: {type(exc).__name__}"
             ) from exc
         return JobResult(job=job_name, items_processed=items_processed)
