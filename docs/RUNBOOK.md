@@ -82,18 +82,13 @@ read the output for errors before continuing.
    Save the output; treat it like a password.
 3. In the service's **Settings → Service**, set **Root Directory** to
    `backend/`. This is required for Railway's builder (Nixpacks) to see
-   `backend/pyproject.toml` and detect a Python app at all.
-4. Scoping the root directory to `backend/` also means the repo's
-   `Procfile` (which lives at the repository root and reads
-   `web: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT`)
-   falls outside that scope and won't be found. Rather than rely on
-   Procfile discovery working across that boundary, set the start command
-   directly: **Settings → Deploy → Custom Start Command**:
-
-   ```
-   uvicorn app.main:app --host 0.0.0.0 --port $PORT
-   ```
-5. In **Settings → Variables**, add:
+   `backend/pyproject.toml` and detect a Python app at all. With the root
+   directory set this way, Railway also picks up `backend/Procfile`
+   automatically and uses it as the start command — nothing else to
+   configure. `Procfile` lives in `backend/`, not the repository root; if
+   you ever point Root Directory at the repo root instead, Railway won't
+   find it and the deploy will build but never start.
+4. In **Settings → Variables**, add:
 
    | Variable | Value |
    |---|---|
@@ -102,12 +97,12 @@ read the output for errors before continuing.
    | `OPENAI_API_KEY` | your key from platform.openai.com |
    | `JOB_TOKEN` | the value from `openssl rand -hex 32` (item 2 above) |
    | `DAILY_LLM_BUDGET_USD` | `1.0` |
-6. Deploy. Once the build finishes, give the service a public URL:
+5. Deploy. Once the build finishes, give the service a public URL:
    **Settings → Networking → Generate Domain**. Railway does not expose a
    domain by default. Note the resulting URL (e.g.
    `https://kalshi-news-backend-production.up.railway.app`) — every step
    from here on calls it `<railway-domain>`.
-7. **Verify:**
+6. **Verify:**
 
    ```bash
    curl https://<railway-domain>/health
@@ -267,10 +262,10 @@ push a commit or re-enable it manually from the Actions tab to restart it.
   `BACKEND_API_URL` is wrong, or Railway is asleep or crashed. Run `curl
   https://<railway-domain>/health` directly: anything other than
   `{"status":"ok"}` means the problem is on Railway's side, not Vercel's.
-- **Railway build fails before it starts the app** — confirm Root
-  Directory is `backend/` (Step 3.3) and that the Custom Start Command
-  (Step 3.4) is set; without both, Nixpacks has nothing to detect a Python
-  app from and no way to know how to start it.
+- **Railway build succeeds but the app never starts** — confirm Root
+  Directory is set to `backend/` (Step 3.3). `Procfile` lives in
+  `backend/`, not the repository root; if Root Directory is left at the
+  repo root, Railway won't find it and has no start command to run.
 - **`alembic upgrade head` can't connect** — confirm the connection string
   has `-pooler` in the hostname, `+psycopg` added after `postgresql`, and
   `?sslmode=require` at the end.
