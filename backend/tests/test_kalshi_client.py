@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import httpx
+import pytest
 import respx
 
 from app.clients.kalshi import BASE_URL, KalshiClient
@@ -58,3 +60,40 @@ def test_fetch_candlesticks_returns_timestamp_price_pairs():
 
     assert [p[1] for p in points] == [68, 72]
     assert points[0][0].tzinfo is UTC
+
+
+@respx.mock
+def test_a_404_is_attempted_once_not_retried():
+    """A 404 (a delisted series, a market with no candlesticks) is a real
+    answer, not a transient failure -- retrying it three times just costs
+    two pointless backoff sleeps before failing anyway."""
+    route = respx.get(f"{BASE_URL}/markets").mock(
+        return_value=httpx.Response(404, json={"error": "not found"}))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        KalshiClient().fetch_all_markets()
+
+    assert route.call_count == 1
+
+
+@respx.mock
+@patch("time.sleep", return_value=None)
+def test_a_500_is_retried_up_to_three_attempts(_sleep):
+    route = respx.get(f"{BASE_URL}/markets").mock(
+        return_value=httpx.Response(500, text="internal error"))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        KalshiClient().fetch_all_markets()
+
+    assert route.call_count == 3
+
+
+@respx.mock
+@patch("time.sleep", return_value=None)
+def test_a_transport_error_is_retried_up_to_three_attempts(_sleep):
+    route = respx.get(f"{BASE_URL}/markets").mock(side_effect=httpx.ConnectError("boom"))
+
+    with pytest.raises(httpx.ConnectError):
+        KalshiClient().fetch_all_markets()
+
+    assert route.call_count == 3

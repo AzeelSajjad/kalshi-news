@@ -5,6 +5,7 @@ from app.clients.kalshi import KalshiClient
 from app.models import JobRun, Market, PostMarket
 
 logger = logging.getLogger(__name__)
+RETRY_WINDOW = timedelta(hours=72)
 
 
 def _price_at(client: KalshiClient, ticker: str, series_ticker: str | None,
@@ -77,6 +78,9 @@ def run_impact(session, client: KalshiClient | None = None,
     already-filled field is never re-fetched, and a link younger than an
     hour is skipped entirely (no fetch at all).
     """
+    # Mirrors sync_markets.py: only close a client this call constructed
+    # itself, never one the caller injected.
+    owns_client = client is None
     client = client or KalshiClient()
     now = now or datetime.now(UTC)
 
@@ -88,9 +92,15 @@ def run_impact(session, client: KalshiClient | None = None,
     failed_tickers: list[str] = []
     error_message: str | None = None
     try:
+        # A link whose market never produced candlesticks (thin or brand-new
+        # markets often have none) can never be filled, and without a ceiling
+        # on created_at it was re-fetched every hour forever -- a Kalshi
+        # request per dead link per hour, growing for the life of the
+        # deployment. 72h is a full day of slack past the 24h snapshot.
         links = (
             session.query(PostMarket)
             .filter((PostMarket.price_1h.is_(None)) | (PostMarket.price_24h.is_(None)))
+            .filter(PostMarket.created_at > now - RETRY_WINDOW)
             .order_by(PostMarket.created_at)
             .all()
         )
@@ -117,5 +127,7 @@ def run_impact(session, client: KalshiClient | None = None,
         run.items_processed = filled
         run.finished_at = datetime.now(UTC)
         session.commit()
+        if owns_client:
+            client.close()
 
     return filled

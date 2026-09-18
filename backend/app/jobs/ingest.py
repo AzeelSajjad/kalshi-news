@@ -76,6 +76,11 @@ def _ingest_source(session, source, ingestor, since, discovered_tweet_ids, seen_
 
 
 def run_ingest(session, ingestors: dict | None = None) -> int:
+    # An ingestor dict built here (nothing injected) is this job's own to
+    # close. A caller-injected dict (tests inject mocks) is not ours to
+    # close -- mirrors the KalshiClient ownership rule in sync_markets.py
+    # and impact.py.
+    owns_ingestors = ingestors is None
     ingestors = ingestors or _default_ingestors()
     run = JobRun(job="ingest", status="running")
     session.add(run)
@@ -140,5 +145,8 @@ def run_ingest(session, ingestors: dict | None = None) -> int:
         run.items_processed = stored
         run.finished_at = datetime.now(UTC)
         session.commit()
+        if owns_ingestors:
+            for ingestor in ingestors.values():
+                ingestor.close()
 
     return stored

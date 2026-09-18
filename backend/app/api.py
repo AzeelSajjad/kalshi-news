@@ -1,6 +1,6 @@
 import logging
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from sqlalchemy import func, tuple_
@@ -213,25 +213,28 @@ def post_detail(post_id: int):
 def trending(limit: int = Query(10, ge=1, le=50)):
     with get_session() as session:
         now = datetime.now(UTC)
-        # status alone is not trustworthy: Kalshi stops returning settled
-        # markets from its open feed, so a settled market's row can keep
-        # status='open' forever. close_time is the real authority, and
-        # find_candidates() (app/linker/retrieval.py) already filters on
-        # both together -- trending must agree or the sidebar surfaces
-        # markets that have already closed.
+        # close_time is the only authority for "is this market live".
+        # markets.status holds whatever Kalshi's payload said ("active" for a
+        # live market, not "open"), and it goes stale the moment a market
+        # settles because Kalshi stops returning settled markets from the open
+        # feed at all. find_candidates() (app/linker/retrieval.py) filters on
+        # close_time alone for the same reason; trending must agree or the
+        # sidebar and the feed disagree about which markets exist.
         by_volume = (
             session.query(Market)
-            .filter(Market.status == "open")
             .filter(Market.close_time > now)
             .order_by(Market.volume.desc().nulls_last())
             .limit(limit)
             .all()
         )
+        # "Most covered" means most covered *today*: without a window on
+        # when the link was recorded, a story from weeks ago with many
+        # outlets would permanently outrank anything happening now.
         covered = (
             session.query(Market, func.count(PostMarket.post_id).label("n"))
             .join(PostMarket, PostMarket.ticker == Market.ticker)
-            .filter(Market.status == "open")
             .filter(Market.close_time > now)
+            .filter(PostMarket.created_at > now - timedelta(hours=24))
             .group_by(Market.ticker)
             .order_by(func.count(PostMarket.post_id).desc())
             .limit(limit)

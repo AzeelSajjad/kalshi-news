@@ -1,12 +1,16 @@
 import html as html_lib
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 
 from app.ingest.base import RawPost
 
 OEMBED_URL = "https://publish.twitter.com/oembed"
+
+# Milliseconds at 2010-11-04T01:42:54.657Z -- the epoch Twitter's snowflake
+# IDs count from.
+TWITTER_EPOCH_MS = 1288834974657
 
 _STATUS_RE = re.compile(r"https?://(?:www\.)?(?:twitter|x)\.com/[^/\s\"']+/status/(\d+)")
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -18,6 +22,27 @@ def extract_tweet_ids(html: str) -> list[str]:
     for match in _STATUS_RE.finditer(html or ""):
         seen.setdefault(match.group(1), None)
     return list(seen)
+
+
+def snowflake_created_at(tweet_id: str) -> datetime | None:
+    """Recover a tweet's real creation time from its ID.
+
+    oEmbed returns no timestamp, so the alternative was stamping every
+    hydrated tweet with now() -- which put each one at the top of a
+    chronological feed reading "just now" regardless of when it was posted.
+    That is a fabricated timestamp in a product whose whole claim is "this
+    news moved this market", so it is not an acceptable placeholder.
+
+    A tweet ID is a snowflake: bits 22 and up are milliseconds since the
+    Twitter epoch. The true time is already in the ID, at no extra request.
+    Returns None for an ID that is not a snowflake, so the caller can fall
+    back rather than crash.
+    """
+    try:
+        millis = (int(tweet_id) >> 22) + TWITTER_EPOCH_MS
+    except (TypeError, ValueError):
+        return None
+    return datetime.fromtimestamp(millis / 1000, tz=UTC)
 
 
 def _tweet_text(embed_html: str) -> str:
@@ -34,6 +59,15 @@ class XIngestor:
 
     def __init__(self, timeout: float = 15.0):
         self._client = httpx.Client(timeout=timeout, follow_redirects=True)
+
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
 
     def hydrate(self, tweet_id: str) -> RawPost | None:
         response = self._client.get(OEMBED_URL, params={
@@ -54,7 +88,7 @@ class XIngestor:
             body=None,
             author_name=payload.get("author_name"),
             author_handle=f"@{handle}" if handle else None,
-            published_at=None,
+            published_at=snowflake_created_at(tweet_id),
         )
 
     def fetch(self, source, since: datetime) -> list[RawPost]:

@@ -25,7 +25,13 @@ def find_candidates(
     rows = (
         session.query(Market, distance)
         .filter(Market.embedding.isnot(None))
-        .filter(Market.status == "open")
+        # close_time, not status, is the authority for "is this market live".
+        # Kalshi's /markets response calls a live market "active", not "open",
+        # and it stops returning settled markets from the open feed entirely --
+        # so a stored status is both a different vocabulary from the `status`
+        # *query filter* we send, and stale the moment a market resolves.
+        # Market.status is kept on the row as advisory metadata only; nothing
+        # filters on it.
         .filter(Market.close_time > datetime.now(UTC))
         .filter(distance <= max_distance)
         .order_by(distance)
