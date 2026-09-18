@@ -7,6 +7,7 @@ import { NewsletterButton } from "@/components/NewsletterButton";
 import { PostDetail } from "@/components/PostDetail";
 import { TrendingRail } from "@/components/TrendingRail";
 import { fetchPost, fetchTrending } from "@/lib/api";
+import { truncate } from "@/lib/format";
 
 export const revalidate = 60;
 
@@ -74,13 +75,4 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     },
     twitter: { card: "summary_large_image", title: post.title, description },
   };
-}
-
-function truncate(text: string, limit: number): string {
-  const clean = text.trim();
-  if (clean.length <= limit) return clean;
-  // Cut on a word boundary so the preview does not end mid-word.
-  const cut = clean.slice(0, limit - 1);
-  const lastSpace = cut.lastIndexOf(" ");
-  return `${(lastSpace > limit / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }

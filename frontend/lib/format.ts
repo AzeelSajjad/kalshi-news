@@ -14,3 +14,17 @@
 export function cents(value: number): string {
   return `${value}¢`;
 }
+
+/**
+ * Shorten prose for a preview, cutting on a word boundary so it never ends
+ * mid-word. Used by the feed card's snippet and by the Open Graph
+ * description a shared link unfurls with — the same job in both places, so
+ * the same function.
+ */
+export function truncate(text: string, limit: number): string {
+  const clean = text.trim();
+  if (clean.length <= limit) return clean;
+  const cut = clean.slice(0, limit - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > limit / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}\u2026`;
+}
