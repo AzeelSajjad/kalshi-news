@@ -25,15 +25,21 @@ describe("PostDetail", () => {
     expect(screen.getByText(/No path to a deal remains./)).toBeInTheDocument();
   });
 
-  it("labels the outbound link for a news article", () => {
+  it("labels the outbound link for a news article and opens it safely", () => {
     render(<PostDetail post={NEWS} />);
     const link = screen.getByRole("link", { name: /Read the full article/i });
     expect(link).toHaveAttribute("href", "https://politico.com/a");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
   });
 
-  it("labels the outbound link for an X post", () => {
+  it("labels the outbound link for an X post, shows the handle, and opens it safely", () => {
     render(<PostDetail post={{ ...NEWS, source_kind: "x", author_handle: "@NickTimiraos" }} />);
-    expect(screen.getByRole("link", { name: /View post on/i })).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /View post on/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.getAttribute("rel")).toContain("noopener");
+    expect(screen.getByText(/@NickTimiraos/)).toBeInTheDocument();
   });
 
   it("renders a post with no related markets without an empty heading", () => {

@@ -20,8 +20,10 @@ export function PostDetail({ post }: { post: PostDetailData }) {
         </div>
       </div>
 
-      <h1 className="mb-2.5 text-xl font-bold leading-tight">{post.title}</h1>
-      {post.body && <p className="mb-4 text-sm leading-relaxed text-muted">{post.body}</p>}
+      <h1 id={`post-title-${post.id}`} className="mb-2.5 text-xl font-bold leading-tight">
+        {post.title}
+      </h1>
+      {post.body && <p className="mb-4 text-sm leading-relaxed text-text">{post.body}</p>}
 
       <a
         href={post.url}
