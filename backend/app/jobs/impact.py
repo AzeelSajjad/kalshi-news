@@ -78,6 +78,9 @@ def run_impact(session, client: KalshiClient | None = None,
     already-filled field is never re-fetched, and a link younger than an
     hour is skipped entirely (no fetch at all).
     """
+    # Mirrors sync_markets.py: only close a client this call constructed
+    # itself, never one the caller injected.
+    owns_client = client is None
     client = client or KalshiClient()
     now = now or datetime.now(UTC)
 
@@ -124,5 +127,7 @@ def run_impact(session, client: KalshiClient | None = None,
         run.items_processed = filled
         run.finished_at = datetime.now(UTC)
         session.commit()
+        if owns_client:
+            client.close()
 
     return filled

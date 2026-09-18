@@ -107,3 +107,20 @@ def test_one_bad_row_costs_its_chunk_not_the_whole_catalog(session):
     run = session.query(JobRun).filter_by(job="sync_markets").one()
     assert run.status == "error"
     assert "chunk" in run.error
+
+
+def test_a_job_constructed_client_is_closed_after_the_run(session):
+    mock_client = MagicMock()
+    mock_client.fetch_all_markets.return_value = []
+    with patch("app.jobs.sync_markets.KalshiClient", return_value=mock_client):
+        sync_markets(session)
+
+    mock_client.close.assert_called_once()
+
+
+def test_an_injected_client_is_not_closed_by_the_job(session):
+    client = _client([])
+
+    sync_markets(session, client=client)
+
+    client.close.assert_not_called()

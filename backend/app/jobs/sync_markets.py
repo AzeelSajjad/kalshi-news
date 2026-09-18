@@ -82,6 +82,10 @@ def sync_markets(session, client: KalshiClient | None = None) -> int:
     jobs use, so a Kalshi outage or a bad row leaves a terminal `job_runs`
     row to look at rather than vanishing into an HTTP 500.
     """
+    # A client constructed here (nothing injected) is this job's own to
+    # close. A caller-injected client (tests inject mocks; a future caller
+    # might share one client across jobs) is not ours to close.
+    owns_client = client is None
     client = client or KalshiClient()
 
     run = JobRun(job="sync_markets", status="running")
@@ -114,5 +118,7 @@ def sync_markets(session, client: KalshiClient | None = None) -> int:
         run.items_processed = synced
         run.finished_at = datetime.now(UTC)
         session.commit()
+        if owns_client:
+            client.close()
 
     return synced

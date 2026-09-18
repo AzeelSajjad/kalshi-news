@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.jobs.impact import run_impact
 from app.models import JobRun, Market, Post, PostMarket, Source
@@ -214,3 +214,19 @@ def test_links_past_the_retry_window_are_not_refetched_forever(session):
 
     assert run_impact(session, client=client, now=NOW) == 0
     client.fetch_candlesticks.assert_not_called()
+
+
+def test_a_job_constructed_client_is_closed_after_the_run(session):
+    mock_client = MagicMock()
+    with patch("app.jobs.impact.KalshiClient", return_value=mock_client):
+        run_impact(session, now=NOW)
+
+    mock_client.close.assert_called_once()
+
+
+def test_an_injected_client_is_not_closed_by_the_job(session):
+    client = _client(64)
+
+    run_impact(session, client=client, now=NOW)
+
+    client.close.assert_not_called()

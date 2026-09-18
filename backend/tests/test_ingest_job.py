@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import httpx
 
@@ -240,3 +240,31 @@ def test_job_run_records_error_status_and_names_failed_sources(session):
     assert "Broken" in run.error
     assert run.items_processed == 1
     assert run.finished_at is not None
+
+
+def test_default_ingestors_are_closed_after_the_run(session):
+    session.add(Source(kind="rss", name="Reuters", feed_url="https://r.com/rss",
+                       category="Economics"))
+    session.commit()
+
+    mock_rss = _ingestor([], kind="rss")
+    mock_x = _ingestor([], kind="x")
+
+    with patch("app.jobs.ingest.RssIngestor", return_value=mock_rss), \
+         patch("app.jobs.ingest.XIngestor", return_value=mock_x):
+        run_ingest(session)
+
+    mock_rss.close.assert_called_once()
+    mock_x.close.assert_called_once()
+
+
+def test_injected_ingestors_are_not_closed_by_the_job(session):
+    session.add(Source(kind="rss", name="Reuters", feed_url="https://r.com/rss",
+                       category="Economics"))
+    session.commit()
+
+    ingestor = _ingestor([])
+
+    run_ingest(session, ingestors={"rss": ingestor})
+
+    ingestor.close.assert_not_called()
