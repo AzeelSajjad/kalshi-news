@@ -2,8 +2,10 @@ import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.linker.retrieval import Candidate
-from app.linker.verifier import VerificationResult, verify_candidates
+from app.linker.verifier import VerificationError, VerificationResult, verify_candidates
 
 NOW = datetime.now(UTC)
 POST = MagicMock(
@@ -193,3 +195,36 @@ def test_one_invalid_entry_does_not_discard_the_rest_of_the_batch():
     result = verify_candidates(POST, CANDIDATES, client=_client(payload))
 
     assert [link.ticker for link in result.links] == ["GOVSHUT-26OCT"]
+
+
+def test_provider_error_on_retry_raises_verification_error_with_first_attempts_tokens():
+    # Attempt 1 returns malformed output (a real, billed call) and attempt 2
+    # -- the retry -- fails at the transport level. The 700/150 tokens from
+    # attempt 1 must not be lost: they are wrapped into the raised error so
+    # the caller can still record that spend.
+    client = MagicMock()
+    client.messages.create.side_effect = [
+        _message("this is not json", input_tokens=700, output_tokens=150),
+        RuntimeError("provider overloaded"),
+    ]
+
+    with pytest.raises(VerificationError) as exc_info:
+        verify_candidates(POST, CANDIDATES, client=client)
+
+    assert exc_info.value.input_tokens == 700
+    assert exc_info.value.output_tokens == 150
+    assert "provider overloaded" in str(exc_info.value)
+    assert exc_info.value.__cause__ is not None
+    assert client.messages.create.call_count == 2
+
+
+def test_provider_error_on_first_attempt_raises_verification_error_with_zero_tokens():
+    client = MagicMock()
+    client.messages.create.side_effect = RuntimeError("provider overloaded")
+
+    with pytest.raises(VerificationError) as exc_info:
+        verify_candidates(POST, CANDIDATES, client=client)
+
+    assert exc_info.value.input_tokens == 0
+    assert exc_info.value.output_tokens == 0
+    assert client.messages.create.call_count == 1
