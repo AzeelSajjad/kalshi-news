@@ -1,0 +1,50 @@
+[
+  {
+    "id": "fed-cut-signal",
+    "title": "Powell signals openness to a September cut as labor data softens",
+    "body": "Federal Reserve Chair Jerome Powell told an audience of economists on Tuesday that policymakers see room to ease if inflation continues to cool, pointing to a run of weaker payrolls reports. Traders raised the odds of a rate cut at the next meeting.",
+    "expected_tickers": ["FED-26SEP"]
+  },
+  {
+    "id": "shutdown-collapse",
+    "title": "Shutdown talks collapse as leadership walks out of budget meeting",
+    "body": "Negotiators from both chambers left a closed-door session without a funding framework Wednesday night, with less than three weeks remaining before the current continuing resolution expires. Aides described the room as tense and unproductive.",
+    "expected_tickers": ["GOVSHUT-26OCT"]
+  },
+  {
+    "id": "celebrity-divorce",
+    "title": "Pop star announces separation after four years of marriage",
+    "body": "A representative for the singer confirmed the split in a brief statement Thursday, citing irreconcilable differences. The couple, who married in a widely covered ceremony, share no children.",
+    "expected_tickers": []
+  },
+  {
+    "id": "inflation-cools-more-than-expected",
+    "title": "Core inflation reading comes in below forecasts, easing pressure on the Fed",
+    "body": "The Bureau of Labor Statistics reported Thursday that core consumer prices rose 0.2% in August, below the 0.3% economists had projected. The softer print gives the Federal Reserve more room to cut rates at its next meeting without stoking inflation fears.",
+    "expected_tickers": ["FED-26SEP"]
+  },
+  {
+    "id": "shutdown-deal-reached",
+    "title": "Congress reaches last-minute deal to keep government open through October",
+    "body": "House and Senate leaders announced a short-term funding agreement late Friday, averting a shutdown that had looked increasingly likely earlier in the week. The bill funds the government through the end of October and now heads to the president's desk.",
+    "expected_tickers": ["GOVSHUT-26OCT"]
+  },
+  {
+    "id": "georgia-senate-runoff-called",
+    "title": "Georgia Senate runoff heads to December after no candidate clears 50%",
+    "body": "Neither candidate reached the majority threshold required under state law, triggering a runoff election set for early December. Both campaigns have already begun rebooking ad time in the Atlanta media market.",
+    "expected_tickers": ["SEN-GA-26DEC"]
+  },
+  {
+    "id": "local-house-fire",
+    "title": "Overnight house fire displaces family of four, no injuries reported",
+    "body": "Firefighters responded to a two-alarm blaze shortly after midnight and had the fire under control within an hour. The Red Cross is assisting the family with temporary housing while investigators determine the cause.",
+    "expected_tickers": []
+  },
+  {
+    "id": "high-school-basketball-title",
+    "title": "Local high school claims first state basketball championship in school history",
+    "body": "The team closed out the season with a 58-52 win in the state final, capping an undefeated run. Fans lined the streets for a celebration parade Monday afternoon.",
+    "expected_tickers": []
+  }
+]
