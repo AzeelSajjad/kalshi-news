@@ -1,5 +1,12 @@
 import type { TrendingMarket, TrendingPage } from "@/lib/types";
 
+function formatVolume(volume: number): string {
+  if (volume >= 1_000_000) {
+    return `$${(volume / 1_000_000).toFixed(1)}M`;
+  }
+  return `$${Math.round(volume / 1_000)}K`;
+}
+
 function Row({ market, showCoverage }: { market: TrendingMarket; showCoverage?: boolean }) {
   return (
     <a
@@ -14,8 +21,8 @@ function Row({ market, showCoverage }: { market: TrendingMarket; showCoverage?: 
           <span className="font-bold text-mint">YES {market.yes_price}¢</span>
         )}
         {showCoverage
-          ? <span>{market.post_count} posts</span>
-          : market.volume !== null && <span>${(market.volume / 1_000_000).toFixed(1)}M vol</span>}
+          ? <span>{market.post_count} post{market.post_count === 1 ? "" : "s"}</span>
+          : market.volume !== null && <span>{formatVolume(market.volume)} vol</span>}
       </div>
     </a>
   );
@@ -26,11 +33,16 @@ export function TrendingRail({ trending }: { trending: TrendingPage }) {
 
   return (
     <aside className="w-[340px] shrink-0">
-      <h4 className="mb-2.5 text-[11px] font-bold uppercase tracking-wider text-muted">
-        Trending markets
-      </h4>
       {empty && <p className="text-xs text-muted">Nothing trending yet.</p>}
-      {trending.by_volume.map((m) => <Row key={m.ticker} market={m} />)}
+
+      {trending.by_volume.length > 0 && (
+        <>
+          <h4 className="mb-2.5 text-[11px] font-bold uppercase tracking-wider text-muted">
+            Trending markets
+          </h4>
+          {trending.by_volume.map((m) => <Row key={m.ticker} market={m} />)}
+        </>
+      )}
 
       {trending.most_covered.length > 0 && (
         <>
