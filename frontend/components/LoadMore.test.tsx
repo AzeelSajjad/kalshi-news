@@ -40,4 +40,32 @@ describe("LoadMore", () => {
     expect(await screen.findByText("Story 3")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /load more/i })).toBeNull();
   });
+
+  it("accumulates items across two clicks instead of replacing the previous page", async () => {
+    server.use(http.get(`${window.location.origin}/api/feed`, ({ request }) => {
+      const cursor = new URL(request.url).searchParams.get("cursor");
+      if (cursor === "cur1") {
+        return HttpResponse.json({ items: [ITEM(2)], next_cursor: "cur2" });
+      }
+      if (cursor === "cur2") {
+        return HttpResponse.json({ items: [ITEM(3)], next_cursor: null });
+      }
+      throw new Error(`unexpected cursor: ${String(cursor)}`);
+    }));
+
+    render(<LoadMore initialCursor="cur1" category={undefined} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /load more/i }));
+    expect(await screen.findByText("Story 2")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /load more/i }));
+    expect(await screen.findByText("Story 3")).toBeInTheDocument();
+
+    // The whole point of this test: both pages' items must be present at
+    // once. setItems(page.items) (replace, instead of the correct
+    // setItems(prev => [...prev, ...page.items])) would pass every assertion
+    // above individually but drop Story 2 here.
+    expect(screen.getByText("Story 2")).toBeInTheDocument();
+    expect(screen.getByText("Story 3")).toBeInTheDocument();
+  });
 });

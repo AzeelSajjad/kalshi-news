@@ -30,6 +30,13 @@ export function LoadMore({
       const page = (await response.json()) as FeedPage;
       setItems((previous) => [...previous, ...page.items]);
       setCursor(page.next_cursor);
+    } catch (error) {
+      // A genuine network failure (as opposed to a non-2xx response, handled
+      // above) rejects the fetch promise. loadNext is fired from onClick with
+      // nothing awaiting it, so an uncaught rejection here would surface as
+      // an unhandled rejection. Log it the way app/error.tsx does and let the
+      // finally block below recover the UI; nothing user-facing changes.
+      console.error(error);
     } finally {
       setLoading(false);
       requestInFlight.current = false;
