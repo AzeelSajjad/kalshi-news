@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import feedparser
 import httpx
 
-from app.ingest.base import RawPost
+from app.ingest.base import RawPost, strip_html
 
 
 class RssIngestor:
@@ -33,13 +33,21 @@ class RssIngestor:
             if published is None or published <= since:
                 continue
             url = entry.get("link", "")
+            # Politico, Bloomberg and CNBC all serve markup inside
+            # <description>. Stored verbatim it renders as literal "<p>" and
+            # "<a href=...>" in the post view and pollutes the embedding, so
+            # the body is reduced to prose here. The original markup rides
+            # along on raw_html because tweet discovery reads hrefs, which
+            # the stripped body no longer has.
+            summary = (entry.get("summary") or "").strip() or None
             posts.append(RawPost(
                 external_id=entry.get("id") or url,
                 url=url,
-                title=entry.get("title", "").strip(),
-                body=(entry.get("summary") or "").strip() or None,
+                title=strip_html(entry.get("title", "")),
+                body=strip_html(summary) or None,
                 author_name=source.name,
                 published_at=published,
+                raw_html=summary,
             ))
         return posts
 

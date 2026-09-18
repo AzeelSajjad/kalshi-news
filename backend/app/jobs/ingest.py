@@ -43,8 +43,13 @@ def _ingest_source(session, source, ingestor, since, discovered_tweet_ids, seen_
 
         stored = 0
         for raw in raw_posts:
-            if source.kind != "x" and raw.body:
-                for tweet_id in extract_tweet_ids(raw.body):
+            # Discovery reads the *unstripped* markup when the ingestor kept
+            # it: tweet URLs live in href attributes, which the cleaned body
+            # no longer contains. Falls back to the body for ingestors that
+            # never had markup to begin with.
+            discoverable = raw.raw_html or raw.body
+            if source.kind != "x" and discoverable:
+                for tweet_id in extract_tweet_ids(discoverable):
                     if tweet_id not in seen_tweet_ids:
                         seen_tweet_ids.add(tweet_id)
                         discovered_tweet_ids.append(tweet_id)

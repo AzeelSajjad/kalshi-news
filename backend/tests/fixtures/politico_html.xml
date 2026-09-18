@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>POLITICO - Politics</title>
+    <link>https://example.com/politico</link>
+    <description>Politics news</description>
+    <language>en-us</language>
+    <!-- Escaped markup inside <description>, exactly as Politico, Bloomberg
+         and CNBC serve it. feedparser hands this back as a string of HTML,
+         not as prose. -->
+    <item>
+      <title>Leadership walks out of shutdown talks</title>
+      <link>https://example.com/politico/shutdown-talks</link>
+      <description>&lt;p&gt;Congressional leaders &lt;strong&gt;left the room&lt;/strong&gt; without a deal, according to &lt;a href="https://example.com/politico/aides"&gt;two aides&lt;/a&gt;.&lt;/p&gt;&lt;p&gt;A shutdown now looks likely &amp;mdash; the deadline is Sept 30.&lt;/p&gt;</description>
+      <pubDate>Wed, 17 Sep 2026 14:02:00 GMT</pubDate>
+      <guid isPermaLink="false">urn:politico:shutdown-talks-2026-09-17</guid>
+    </item>
+    <!-- The only place a tweet URL appears is inside an href. Stripping tags
+         without preserving the original markup for discovery would silently
+         switch off the entire X ingestion path. -->
+    <item>
+      <title>Aide posts the whip count</title>
+      <link>https://example.com/politico/whip-count</link>
+      <description>&lt;p&gt;An aide &lt;a href="https://x.com/anaide/status/1839000000000000005"&gt;posted the count&lt;/a&gt;.&lt;/p&gt;</description>
+      <pubDate>Wed, 17 Sep 2026 14:05:00 GMT</pubDate>
+      <guid isPermaLink="false">urn:politico:whip-count-2026-09-17</guid>
+    </item>
+  </channel>
+</rss>

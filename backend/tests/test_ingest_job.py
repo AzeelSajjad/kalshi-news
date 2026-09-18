@@ -268,3 +268,33 @@ def test_injected_ingestors_are_not_closed_by_the_job(session):
     run_ingest(session, ingestors={"rss": ingestor})
 
     ingestor.close.assert_not_called()
+
+
+def test_tweet_discovery_reads_the_unstripped_markup(session):
+    """The stored body has no hrefs; discovery must not depend on them being there.
+
+    RSS bodies are stripped to prose at ingest, which deletes the <a href>
+    that a tweet URL lives in. If discovery scanned the stored body, the
+    entire X ingestion path would go silently dead -- no error, no failed
+    source, just no tweets ever again.
+    """
+    session.add_all([
+        Source(kind="rss", name="Politico", feed_url="https://p.com/rss", category="Politics"),
+        Source(kind="x", name="X", handle=None, category="World"),
+    ])
+    session.commit()
+
+    article = RawPost(
+        external_id="guid-9", url="https://p.com/a", title="Aide posts the whip count",
+        body="An aide posted the count.",
+        raw_html='<p>An aide <a href="https://x.com/anaide/status/1839000000000000005">'
+                 "posted the count</a>.</p>",
+        author_name="Politico",
+        published_at=datetime(2026, 9, 17, 14, 5, tzinfo=UTC),
+    )
+    x_ingestor = _ingestor([], kind="x")
+
+    run_ingest(session, ingestors={"rss": _ingestor([article]), "x": x_ingestor})
+
+    x_source = x_ingestor.fetch.call_args.args[0]
+    assert x_source.pending_tweet_ids == ["1839000000000000005"]
