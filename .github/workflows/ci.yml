@@ -26,5 +26,13 @@ jobs:
           python-version: "3.11"
       - run: pip install -e "./backend[dev]"
       - run: cd backend && ruff check .
-      - run: cd backend && alembic upgrade head && alembic downgrade base
+      - run: cd backend && alembic upgrade head
+      # alembic upgrade head / downgrade base only proves the migrations
+      # run -- the test suite builds its own schema with create_all, so
+      # nothing had ever actually written to the alembic-built schema.
+      # This inserts a real row (exercising 0002_seed_sources' NOT NULL /
+      # server_default columns), reads it back, and fails the build if it
+      # doesn't work.
+      - run: cd backend && python scripts/ci_migration_smoke_test.py
+      - run: cd backend && alembic downgrade base
       - run: cd backend && python -m pytest tests/ -v
