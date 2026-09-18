@@ -1,7 +1,11 @@
 export interface MarketRef {
   ticker: string;
   title: string;
-  direction: string;
+  // The two values the linker emits. Narrowed from `string` so a
+  // component branching on direction has an exhaustive set to branch on,
+  // and a typo in a test fixture is a type error rather than a silent
+  // fall-through to the NO styling.
+  direction: "YES" | "NO";
   confidence: number;
   rationale: string;
   yes_price: number | null;
