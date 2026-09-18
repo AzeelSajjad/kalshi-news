@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Reuters: Top News</title>
+    <link>https://example.com/reuters</link>
+    <description>Breaking news and analysis from Reuters</description>
+    <language>en-us</language>
+    <item>
+      <title>Powell signals openness to a September cut</title>
+      <link>https://example.com/reuters/powell-signals-openness-to-a-september-cut</link>
+      <description>Federal Reserve Chair Jerome Powell told reporters on Wednesday that policymakers are increasingly open to lowering interest rates at their next meeting, citing cooling labor market data.</description>
+      <pubDate>Wed, 17 Sep 2026 14:02:00 GMT</pubDate>
+      <guid isPermaLink="false">urn:reuters:powell-signals-openness-2026-09-17</guid>
+    </item>
+    <item>
+      <title>Shutdown talks collapse</title>
+      <link>https://example.com/reuters/shutdown-talks-collapse</link>
+      <description>Negotiations between congressional leaders and the White House broke down late Tuesday, raising the odds of a government shutdown at the end of the month.</description>
+      <pubDate>Wed, 17 Sep 2026 13:10:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
