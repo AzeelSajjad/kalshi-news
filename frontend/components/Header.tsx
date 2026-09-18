@@ -6,13 +6,13 @@ export const CATEGORIES = [
 
 function tabClass(isActive: boolean) {
   return isActive
-    ? "rounded-md bg-mint px-2.5 py-1.5 text-[12.5px] font-semibold text-[#06120F]"
+    ? "rounded-md bg-mint px-2.5 py-1.5 text-[12.5px] font-semibold text-bg"
     : "rounded-md px-2.5 py-1.5 text-[12.5px] text-muted hover:text-text";
 }
 
 export function Header({ active }: { active: string | null }) {
   return (
-    <header className="flex items-center gap-4 border-b border-border bg-[#0D1211] px-4 py-2.5">
+    <header className="flex items-center gap-4 border-b border-border bg-surface px-4 py-2.5">
       <nav className="flex flex-1 gap-1 overflow-x-auto">
         <Link href="/" className={tabClass(active === null)}
               aria-current={active === null ? "page" : undefined}>
