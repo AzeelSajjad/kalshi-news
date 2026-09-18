@@ -8,8 +8,14 @@ def test_settings_read_from_environment(monkeypatch):
     monkeypatch.setenv("JOB_TOKEN", "secret")
     get_settings.cache_clear()
 
-    settings = get_settings()
+    try:
+        settings = get_settings()
 
-    assert settings.database_url == "postgresql://u:p@localhost/db"
-    assert settings.job_token == "secret"
-    assert settings.daily_llm_budget_usd == 1.0
+        assert settings.database_url == "postgresql://u:p@localhost/db"
+        assert settings.job_token == "secret"
+        assert settings.daily_llm_budget_usd == 1.0
+    finally:
+        # get_settings is lru_cache'd at module scope; without clearing it here,
+        # this test's monkeypatched env values leak into every later test in the
+        # session (monkeypatch only restores os.environ, not the cache).
+        get_settings.cache_clear()

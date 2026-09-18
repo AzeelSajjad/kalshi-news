@@ -26,4 +26,5 @@ jobs:
           python-version: "3.11"
       - run: pip install -e "./backend[dev]"
       - run: cd backend && ruff check .
+      - run: cd backend && alembic upgrade head && alembic downgrade base
       - run: cd backend && python -m pytest tests/ -v
