@@ -1,4 +1,39 @@
+"""Pins a real Kalshi API response so a retrieval/status regression is caught by recorded
+data, not by a hand-built fixture that re-encodes the same assumption this task exists to
+eliminate.
+
+Provenance
+----------
+Captured 2026-09-18 via::
+
+    GET https://external-api.kalshi.com/trade-api/v2/markets?limit=3&status=open
+
+`fixtures/kalshi_markets_live.json` is that real, unmodified response, except for two
+deliberate edits made below/at capture time -- neither touches `status`, which is left
+exactly as Kalshi returned it (`"active"`, not `"open"`; see task-1-report.md in
+.superpowers/sdd/2026-09-18-frontend-and-deploy/ for why that distinction is the point of
+this file):
+
+1. The top-level `cursor` field was blanked to `""` at capture time. The real response had a
+   non-empty Kalshi pagination token (there are more than 3 open markets). The `respx.mock`
+   below always replays the same response body regardless of the request's `cursor` param, so
+   replaying the real token verbatim sends `KalshiClient.fetch_all_markets`'s `while True`
+   loop into an infinite spin against a static mock -- confirmed by hand (2.5+ minutes pinned
+   at ~95% CPU before the process was killed). This is a test-harness workaround for a static
+   mock, not a claim that the client's pagination loop is fine as written; the unbounded loop
+   itself is tracked separately as issue #43.
+2. Each market's `close_time` is rewritten below, at import time, to `now + 30 days`. The raw
+   capture's close_time values are fixed calendar dates a few days out from 2026-09-18.
+   `find_candidates` filters on `close_time > now()`, so replaying those fixed dates verbatim
+   would make `test_synced_markets_are_retrievable_regardless_of_status_value` rot into a
+   false "retrieval is broken" failure within about a week of merge -- indistinguishable, to
+   whoever sees it, from a real status-coupling regression. Shifting relative to `now()` at
+   load time keeps the fixture evergreen without touching any other field (status, ticker,
+   title, etc. are untouched).
+"""
+
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,6 +55,14 @@ from app.models import Market, Post, Source
 # same file passes as part of the full suite where another module's
 # top-level import happens to run first.
 LIVE = json.loads((Path(__file__).parent / "fixtures" / "kalshi_markets_live.json").read_text())
+
+# See module docstring, edit 2: shift every market's close_time to a fixed offset from
+# *now*, evaluated when this module loads, so the fixture never rots into a false
+# "retrieval is broken" failure as real calendar time passes. status and every other
+# recorded field are left untouched.
+_FUTURE_CLOSE_TIME = (datetime.now(UTC) + timedelta(days=30)).isoformat()
+for _market in LIVE["markets"]:
+    _market["close_time"] = _FUTURE_CLOSE_TIME
 
 
 @respx.mock
