@@ -202,3 +202,15 @@ def test_market_lookup_failure_is_isolated_to_its_own_link(session, monkeypatch)
     assert persisted_first.price_1h is None    # its Market lookup raised: isolated
     assert persisted_second.price_1h == 64     # the next link still gets processed
     assert filled == 1
+
+
+def test_links_past_the_retry_window_are_not_refetched_forever(session):
+    """A market with no candlestick data can never fill its snapshots. With
+    no ceiling on created_at that link was re-fetched every hour for the life
+    of the deployment -- one Kalshi request per dead link per hour, growing
+    without bound."""
+    _link(session, NOW - timedelta(hours=100))
+    client = MagicMock()
+
+    assert run_impact(session, client=client, now=NOW) == 0
+    client.fetch_candlesticks.assert_not_called()

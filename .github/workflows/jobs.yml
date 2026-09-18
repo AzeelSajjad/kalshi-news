@@ -13,7 +13,7 @@ jobs:
       - name: Sync markets
         if: github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch'
         run: |
-          curl -sS -f -X POST "$API_URL/api/jobs/sync_markets" \
+          curl -sS -f --max-time 120 -X POST "$API_URL/api/jobs/sync_markets" \
             -H "X-Job-Token: $JOB_TOKEN"
         env:
           API_URL: ${{ secrets.API_URL }}
@@ -21,15 +21,15 @@ jobs:
       - name: Ingest then link
         if: github.event.schedule == '*/10 * * * *' || github.event_name == 'workflow_dispatch'
         run: |
-          curl -sS -f -X POST "$API_URL/api/jobs/ingest" -H "X-Job-Token: $JOB_TOKEN"
-          curl -sS -f -X POST "$API_URL/api/jobs/link"   -H "X-Job-Token: $JOB_TOKEN"
+          curl -sS -f --max-time 120 -X POST "$API_URL/api/jobs/ingest" -H "X-Job-Token: $JOB_TOKEN"
+          curl -sS -f --max-time 120 -X POST "$API_URL/api/jobs/link"   -H "X-Job-Token: $JOB_TOKEN"
         env:
           API_URL: ${{ secrets.API_URL }}
           JOB_TOKEN: ${{ secrets.JOB_TOKEN }}
       - name: Impact
         if: github.event.schedule == '17 * * * *' || github.event_name == 'workflow_dispatch'
         run: |
-          curl -sS -f -X POST "$API_URL/api/jobs/impact" -H "X-Job-Token: $JOB_TOKEN"
+          curl -sS -f --max-time 120 -X POST "$API_URL/api/jobs/impact" -H "X-Job-Token: $JOB_TOKEN"
         env:
           API_URL: ${{ secrets.API_URL }}
           JOB_TOKEN: ${{ secrets.JOB_TOKEN }}

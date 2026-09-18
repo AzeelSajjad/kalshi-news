@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -30,7 +31,12 @@ class Source(Base):
     feed_url: Mapped[str | None] = mapped_column(String(512))
     handle: Mapped[str | None] = mapped_column(String(64))
     category: Mapped[str] = mapped_column(String(32))
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # server_default as well as the Python default: a hand-written INSERT
+    # (psql, a data migration, a fixture) must not have to know the ORM
+    # defaults a NOT NULL column.
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
 
 
 class Cluster(Base):

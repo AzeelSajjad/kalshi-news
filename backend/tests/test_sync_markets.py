@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
+import httpx
+
 from app.clients.kalshi import KalshiMarket
 from app.jobs.sync_markets import sync_markets
-from app.models import Market
+from app.models import JobRun, Market
 
 M = KalshiMarket(
     ticker="FED-26SEP", event_ticker="FED", series_ticker="FED",
@@ -63,3 +65,45 @@ def test_sync_dedupes_duplicate_ticker_within_one_fetch(session):
 
     assert count == 2
     assert session.query(Market).count() == 1
+
+
+def test_job_run_is_recorded_on_success(session):
+    with patch("app.jobs.sync_markets.embed_texts", return_value=[[0.3] * 1536]):
+        sync_markets(session, client=_client([M]))
+
+    run = session.query(JobRun).filter_by(job="sync_markets").one()
+    assert run.status == "ok"
+    assert run.items_processed == 1
+    assert run.finished_at is not None
+
+
+def test_a_kalshi_outage_is_recorded_not_raised(session):
+    """Previously the only job with no JobRun: a Kalshi outage aborted the
+    whole sync and left nothing in job_runs to look at."""
+    client = MagicMock()
+    client.fetch_all_markets.side_effect = httpx.ConnectError("kalshi is down")
+
+    assert sync_markets(session, client=client) == 0
+
+    run = session.query(JobRun).filter_by(job="sync_markets").one()
+    assert run.status == "error"
+    assert "kalshi is down" in run.error
+    assert run.finished_at is not None
+
+
+def test_one_bad_row_costs_its_chunk_not_the_whole_catalog(session):
+    """title=None violates the NOT NULL constraint on markets.title, so that
+    chunk fails at commit. With a single unchunked upsert the entire catalog
+    would be rolled back; chunked, the good markets still land."""
+    bad = KalshiMarket(**{**M.__dict__, "ticker": "BAD-26SEP", "title": None})
+    other = KalshiMarket(**{**M.__dict__, "ticker": "GOOD-26SEP"})
+
+    with patch("app.jobs.sync_markets.CHUNK_SIZE", 1), \
+         patch("app.jobs.sync_markets.embed_texts", return_value=[[0.3] * 1536]):
+        synced = sync_markets(session, client=_client([M, bad, other]))
+
+    assert synced == 2
+    assert {m.ticker for m in session.query(Market).all()} == {"FED-26SEP", "GOOD-26SEP"}
+    run = session.query(JobRun).filter_by(job="sync_markets").one()
+    assert run.status == "error"
+    assert "chunk" in run.error

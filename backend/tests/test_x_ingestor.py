@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import httpx
 import respx
 
@@ -60,3 +62,30 @@ def test_hydrate_never_sends_credentials():
     headers = {k.lower() for k in respx.calls[0].request.headers}
     assert "authorization" not in headers
     assert "cookie" not in headers
+
+
+@respx.mock
+def test_hydrate_derives_published_at_from_the_snowflake_id():
+    """oEmbed carries no timestamp, so stamping the tweet `now` put every
+    hydrated post at the top of a chronological feed reading "just now" --
+    a fabricated time, and one that misrepresents when the news broke.
+
+    A tweet ID is a snowflake: bits 22 and up are milliseconds since the
+    Twitter epoch (2010-11-04T01:42:54.657Z), so the real creation time is
+    already in the ID and needs no extra request.
+    """
+    respx.get(OEMBED_URL).mock(return_value=httpx.Response(200, json=OEMBED_PAYLOAD))
+
+    post = XIngestor().hydrate("1839000000000000001")
+
+    assert post.published_at == datetime(2024, 9, 25, 17, 52, 21, 624000, tzinfo=UTC)
+    assert post.published_at.tzinfo is not None
+
+
+@respx.mock
+def test_hydrate_leaves_published_at_unset_for_a_non_numeric_id():
+    """An unparseable id must not crash hydration; the ingest job already
+    falls back to now() for a RawPost with no published_at."""
+    respx.get(OEMBED_URL).mock(return_value=httpx.Response(200, json=OEMBED_PAYLOAD))
+
+    assert XIngestor().hydrate("not-a-snowflake").published_at is None

@@ -343,3 +343,24 @@ def test_two_posts_in_one_cluster_cost_one_llm_call_and_share_its_tags(session):
         assert [link.ticker for link in links] == ["GOVSHUT-26OCT"]
         assert links[0].direction == "YES"
         assert links[0].rationale == LINK.rationale
+
+
+def test_a_run_is_capped_so_it_fits_inside_the_http_request(session):
+    """run_link is executed synchronously inside the job endpoint's request
+    and each post is a multi-second Haiku round trip, so the batch has to be
+    small enough to finish before the cron's curl gives up. At 15 per run
+    every 10 minutes the job still clears 2160 posts/day."""
+    _setup(session)
+    source = session.query(Source).one()
+    for i in range(20):
+        session.add(Post(source_id=source.id, external_id=f"bulk{i}", url=f"u{i}",
+                         title=f"Shutdown story {i}",
+                         published_at=NOW - timedelta(minutes=i + 1)))
+    session.commit()
+
+    vector = [1.0] + [0.0] * 1535
+    with patch("app.jobs.link.embed_texts", side_effect=lambda texts: [vector] * len(texts)), \
+         patch("app.jobs.link.verify_candidates", return_value=_result([LINK])):
+        run_link(session)
+
+    assert session.query(Post).filter(Post.linked_at.isnot(None)).count() == 15
