@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
-from app.models import Source, Post, Market, PostMarket
+from datetime import UTC, datetime
+
+from app.models import Market, Post, PostMarket, Source
 
 
 def test_post_market_link_round_trips(session):
@@ -14,7 +15,7 @@ def test_post_market_link_round_trips(session):
         author_name="Reuters",
         title="Powell signals cut",
         body="Officials see room to ease.",
-        published_at=datetime(2026, 9, 17, tzinfo=timezone.utc),
+        published_at=datetime(2026, 9, 17, tzinfo=UTC),
         embedding=[0.1] * 1536,
     )
     market = Market(
@@ -24,7 +25,7 @@ def test_post_market_link_round_trips(session):
         rules_summary="Resolves YES if the target rate is lowered.",
         category="Economics",
         status="open",
-        close_time=datetime(2026, 9, 30, tzinfo=timezone.utc),
+        close_time=datetime(2026, 9, 30, tzinfo=UTC),
         yes_price=72,
         volume=5100000,
         text_hash="deadbeef",
@@ -54,6 +55,6 @@ def test_post_external_id_is_unique_per_source(session):
     session.flush()
     for _ in range(2):
         session.add(Post(source_id=source.id, external_id="dup", url="https://ap.com/x",
-                         title="t", published_at=datetime.now(timezone.utc)))
+                         title="t", published_at=datetime.now(UTC)))
     with pytest.raises(IntegrityError):
         session.commit()

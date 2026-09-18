@@ -1,11 +1,22 @@
-from datetime import datetime, date, timezone
+from datetime import UTC, date, datetime
+
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer,
-    Numeric, String, Text, UniqueConstraint,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.db import Base
 
 EMBED_DIM = 1536
@@ -27,7 +38,9 @@ class Cluster(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     representative_post_id: Mapped[int | None] = mapped_column(BigInteger)
     post_count: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class Post(Base):
@@ -44,7 +57,9 @@ class Post(Base):
     body: Mapped[str | None] = mapped_column(Text)
     category: Mapped[str | None] = mapped_column(String(32))
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM))
     cluster_id: Mapped[int | None] = mapped_column(ForeignKey("clusters.id"))
     linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -65,7 +80,9 @@ class Market(Base):
     volume: Mapped[int | None] = mapped_column(BigInteger)
     text_hash: Mapped[str | None] = mapped_column(String(64))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class PostMarket(Base):
@@ -78,7 +95,9 @@ class PostMarket(Base):
     price_at_link: Mapped[int | None] = mapped_column(Integer)
     price_1h: Mapped[int | None] = mapped_column(Integer)
     price_24h: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
     post: Mapped[Post] = relationship()
     market: Mapped[Market] = relationship()
 
@@ -90,7 +109,9 @@ class Subscriber(Base):
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String(32)))
     unsub_token: Mapped[str] = mapped_column(String(64), unique=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class JobRun(Base):
@@ -100,7 +121,9 @@ class JobRun(Base):
     status: Mapped[str] = mapped_column(String(16))            # running | ok | error
     items_processed: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
