@@ -12,6 +12,15 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
+// A realistic cursor, not a placeholder. Every cursor the backend emits is
+// "<isoformat timestamp>|<post id>", and every one of those contains a
+// "+00:00" offset. `+` is also the legacy query-string encoding for a space,
+// so the value only survives the three encoding hops -- URLSearchParams here,
+// the route handler's URL parse, the outbound URL to the backend -- if each
+// one encodes it properly. They all do; "cur1" proved none of it.
+const CURSOR = "2026-09-18T12:00:00+00:00|41";
+const NEXT_CURSOR = "2026-09-18T11:00:00+00:00|17";
+
 const ITEM = (id: number) => ({
   id, title: `Story ${id}`, url: "u", author_name: "Reuters", author_handle: null,
   avatar_url: null, source_kind: "rss", category: "World",
@@ -21,9 +30,9 @@ const ITEM = (id: number) => ({
 describe("LoadMore", () => {
   it("appends the next page and keeps the button while more remain", async () => {
     server.use(http.get(`${window.location.origin}/api/feed`, () =>
-      HttpResponse.json({ items: [ITEM(2)], next_cursor: "cur2" })));
+      HttpResponse.json({ items: [ITEM(2)], next_cursor: NEXT_CURSOR })));
 
-    render(<LoadMore initialCursor="cur1" category={undefined} />);
+    render(<LoadMore initialCursor={CURSOR} category={undefined} />);
     await userEvent.click(screen.getByRole("button", { name: /load more/i }));
 
     expect(await screen.findByText("Story 2")).toBeInTheDocument();
@@ -34,7 +43,7 @@ describe("LoadMore", () => {
     server.use(http.get(`${window.location.origin}/api/feed`, () =>
       HttpResponse.json({ items: [ITEM(3)], next_cursor: null })));
 
-    render(<LoadMore initialCursor="cur1" category={undefined} />);
+    render(<LoadMore initialCursor={CURSOR} category={undefined} />);
     await userEvent.click(screen.getByRole("button", { name: /load more/i }));
 
     expect(await screen.findByText("Story 3")).toBeInTheDocument();
@@ -44,16 +53,16 @@ describe("LoadMore", () => {
   it("accumulates items across two clicks instead of replacing the previous page", async () => {
     server.use(http.get(`${window.location.origin}/api/feed`, ({ request }) => {
       const cursor = new URL(request.url).searchParams.get("cursor");
-      if (cursor === "cur1") {
-        return HttpResponse.json({ items: [ITEM(2)], next_cursor: "cur2" });
+      if (cursor === CURSOR) {
+        return HttpResponse.json({ items: [ITEM(2)], next_cursor: NEXT_CURSOR });
       }
-      if (cursor === "cur2") {
+      if (cursor === NEXT_CURSOR) {
         return HttpResponse.json({ items: [ITEM(3)], next_cursor: null });
       }
       throw new Error(`unexpected cursor: ${String(cursor)}`);
     }));
 
-    render(<LoadMore initialCursor="cur1" category={undefined} />);
+    render(<LoadMore initialCursor={CURSOR} category={undefined} />);
 
     await userEvent.click(screen.getByRole("button", { name: /load more/i }));
     expect(await screen.findByText("Story 2")).toBeInTheDocument();
