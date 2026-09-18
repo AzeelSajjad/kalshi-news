@@ -50,3 +50,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+        env:
+          BACKEND_API_URL: http://127.0.0.1:9999
+      - run: npx playwright test
