@@ -202,3 +202,79 @@ def test_pagination_stops_when_the_cursor_repeats():
 
     assert route.call_count == 2, "should send the cursor once, see it repeat, and stop"
     assert len(markets) == 2
+
+
+def test_a_null_new_field_falls_back_to_a_usable_old_field():
+    """A payload carrying both field styles (a Kalshi field-migration window) must not let a
+    present-but-null new key shadow a usable old key. Fix round 1: the guard used to check
+    `new_key in raw`, which is true even when the new key's value is None -- inert against
+    today's real responses (which carry no old keys at all) but wrong for a transition period
+    where Kalshi ships both styles at once."""
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    payload = {"markets": [{
+        "ticker": "TEST-5", "event_ticker": "TEST", "title": "Mixed fields?",
+        "status": "active", "close_time": "2026-12-01T20:00:00Z",
+        "yes_bid_dollars": None, "yes_bid": 71,
+        "yes_ask_dollars": None, "yes_ask": 73,
+        "last_price_dollars": None,
+        "volume_fp": None, "volume": 5100000,
+    }], "cursor": ""}
+
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(return_value=httpx.Response(200, json=payload))
+        market = KalshiClient().fetch_all_markets()[0]
+
+    assert market.yes_price == 72, "old yes_bid/yes_ask midpoint should be used"
+    assert market.volume == 5100000, "old volume should be used when volume_fp is null"
+
+
+def test_last_price_old_name_fallback_is_used_when_dollars_field_is_absent():
+    """last_price (old name) takes precedence over the midpoint, so an error in this specific
+    fallback path would silently change every price -- it was previously reachable but
+    untested."""
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    payload = {"markets": [{
+        "ticker": "TEST-6", "event_ticker": "TEST", "title": "Old-style trade?",
+        "status": "active", "close_time": "2026-12-01T20:00:00Z",
+        "last_price": 58, "yes_bid": 50, "yes_ask": 60, "volume": 100,
+    }], "cursor": ""}
+
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(return_value=httpx.Response(200, json=payload))
+        market = KalshiClient().fetch_all_markets()[0]
+
+    assert market.yes_price == 58, "old last_price should win over the bid/ask midpoint"
+
+
+def test_dollar_to_cent_rounding_is_documented_at_the_half_cent_boundary():
+    """Pins the rounding rule explicitly at a half-cent boundary so nobody has to reason about
+    float binary representation to know what the code does. Fix round 1: switched from
+    round(float(value) * 100) -- Python's round() breaks exact halves to even (banker's
+    rounding) -- to Decimal with ROUND_HALF_UP, which always rounds an exact half away from
+    zero."""
+    import httpx
+    import respx
+
+    from app.clients.kalshi import BASE_URL, KalshiClient
+
+    payload = {"markets": [
+        {"ticker": "TEST-7A", "title": "a", "status": "active",
+         "close_time": "2026-12-01T20:00:00Z", "last_price_dollars": "0.6350"},
+        {"ticker": "TEST-7B", "title": "b", "status": "active",
+         "close_time": "2026-12-01T20:00:00Z", "last_price_dollars": "0.6250"},
+    ], "cursor": ""}
+
+    with respx.mock:
+        respx.get(f"{BASE_URL}/markets").mock(return_value=httpx.Response(200, json=payload))
+        markets = KalshiClient().fetch_all_markets()
+
+    assert markets[0].yes_price == 64, "0.6350 rounds half-up to 64 cents"
+    assert markets[1].yes_price == 63, "0.6250 rounds half-up to 63 cents"

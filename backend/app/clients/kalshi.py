@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 import httpx
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -46,14 +47,24 @@ def _midpoint(bid, ask) -> int | None:
 def _parse_dollars_to_cents(value: object) -> int | None:
     """Convert a dollars-denominated field (e.g. '0.6400' -> 64 cents).
 
+    Uses Decimal rather than float: float(value) * 100 is exposed to binary
+    floating-point representation error on some inputs, and plain round()
+    breaks an exact half-cent to the nearest *even* cent (banker's
+    rounding) rather than consistently away from zero. Decimal with
+    ROUND_HALF_UP makes the rounding rule at a half-cent boundary explicit
+    and independent of float representation -- this is a money value the
+    UI presents as fact, so "quietly different depending on how you read
+    the code" is not acceptable here.
+
     Tolerates None, '', and garbage strings by returning None -- one
     unparseable market must not abort a sync of thousands.
     """
     if value is None or value == "":
         return None
     try:
-        return round(float(value) * 100)
-    except (TypeError, ValueError):
+        cents = (Decimal(str(value)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return int(cents)
+    except (TypeError, ValueError, InvalidOperation, ArithmeticError):
         return None
 
 
@@ -89,11 +100,18 @@ def _price_field_cents(raw: dict, new_key: str, old_key: str) -> int | None:
     The new field is a dollars string ('0.6400' -> 64 cents). The old
     field (used by the pre-existing fixtures/tests) is already integer
     cents, so it is coerced directly rather than run through dollar
-    parsing. Only falls back to the old key when the new key is absent
-    entirely, so an explicit null under the new key is still respected.
+    parsing.
+
+    Falls back to the old key whenever the new key isn't *usable* --
+    absent, None, or '' -- not merely whenever it's absent. A Kalshi
+    field-migration window could plausibly ship both field styles in the
+    same payload with the new one null; keying the fallback on presence
+    alone would let that null new key permanently shadow a perfectly
+    usable old one.
     """
-    if new_key in raw:
-        return _parse_dollars_to_cents(raw.get(new_key))
+    new_value = raw.get(new_key)
+    if new_value not in (None, ""):
+        return _parse_dollars_to_cents(new_value)
     return _safe_int(raw.get(old_key))
 
 
@@ -122,11 +140,13 @@ def _volume(raw: dict) -> int | None:
 
     volume_fp is a fixed-point string ('2400000.00' -> 2400000). The old
     `volume` field (used by the pre-existing fixtures/tests) is already an
-    int, so it is coerced directly. Only falls back when volume_fp is
-    entirely absent.
+    int, so it is coerced directly. Falls back to `volume` whenever
+    `volume_fp` isn't usable -- absent, None, or '' -- not merely when
+    it's absent (see `_price_field_cents` for why).
     """
-    if "volume_fp" in raw:
-        return _parse_fixed_point_to_int(raw.get("volume_fp"))
+    fp_value = raw.get("volume_fp")
+    if fp_value not in (None, ""):
+        return _parse_fixed_point_to_int(fp_value)
     return _safe_int(raw.get("volume"))
 
 
