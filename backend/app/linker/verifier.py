@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import dataclass
 
 from anthropic import Anthropic
 from pydantic import BaseModel, Field, ValidationError
@@ -39,8 +40,11 @@ class VerifiedLink(BaseModel):
     rationale: str
 
 
-class _Response(BaseModel):
+@dataclass(frozen=True)
+class VerificationResult:
     links: list[VerifiedLink]
+    input_tokens: int
+    output_tokens: int
 
 
 def _prompt(post, candidates: list[Candidate]) -> str:
@@ -61,27 +65,55 @@ def estimate_cost(input_tokens: int, output_tokens: int) -> float:
     return input_tokens * INPUT_USD_PER_TOKEN + output_tokens * OUTPUT_USD_PER_TOKEN
 
 
-def verify_candidates(post, candidates: list[Candidate], client=None) -> list[VerifiedLink]:
+def _extract_json(raw: str) -> str:
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return raw
+    return raw[start : end + 1]
+
+
+def _parse_links(payload: dict, valid_tickers: set[str]) -> list[VerifiedLink]:
+    links: list[VerifiedLink] = []
+    for entry in payload["links"]:
+        try:
+            link = VerifiedLink(**entry)
+        except (ValidationError, TypeError):
+            continue
+        if link.related and link.ticker in valid_tickers:
+            links.append(link)
+    return links
+
+
+def verify_candidates(post, candidates: list[Candidate], client=None) -> VerificationResult:
     if not candidates:
-        return []
+        return VerificationResult([], 0, 0)
     client = client or Anthropic(api_key=get_settings().anthropic_api_key)
     valid_tickers = {candidate.ticker for candidate in candidates}
     prompt = _prompt(post, candidates)
 
+    total_input_tokens = 0
+    total_output_tokens = 0
     for attempt in range(2):
         message = client.messages.create(
             model=MODEL,
-            max_tokens=1024,
+            max_tokens=2048,
             system=SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = message.content[0].text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1].removeprefix("json").strip()
+        total_input_tokens += message.usage.input_tokens
+        total_output_tokens += message.usage.output_tokens
         try:
-            parsed = _Response(**json.loads(raw))
-        except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+            raw = _extract_json(message.content[0].text.strip())
+            links = _parse_links(json.loads(raw), valid_tickers)
+        except (
+            json.JSONDecodeError,
+            TypeError,
+            KeyError,
+            IndexError,
+            AttributeError,
+        ) as exc:
             logger.warning("verifier returned unusable output (attempt %s): %s", attempt + 1, exc)
             continue
-        return [link for link in parsed.links if link.related and link.ticker in valid_tickers]
-    return []
+        return VerificationResult(links, total_input_tokens, total_output_tokens)
+    return VerificationResult([], total_input_tokens, total_output_tokens)
