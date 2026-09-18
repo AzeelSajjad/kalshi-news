@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 BASE_URL = "https://external-api.kalshi.com/trade-api/v2"
 
@@ -35,13 +35,39 @@ def _midpoint(bid, ask) -> int | None:
     return round((bid + ask) / 2)
 
 
+def _is_retryable(exc: BaseException) -> bool:
+    """Only retry failures a retry could plausibly fix.
+
+    Retrying on *any* exception meant a permanent 404 (a delisted series, a
+    market with no candlesticks) cost three requests and two backoff sleeps
+    before failing anyway -- multiplied by every dead link the impact job
+    walks. Transport errors, 5xx and 429 are transient; a 4xx is an answer.
+    """
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status == 429 or status >= 500
+    return False
+
+
 class KalshiClient:
     """Read-only client for Kalshi's public endpoints. Never sends auth headers."""
 
     def __init__(self, timeout: float = 20.0):
         self._client = httpx.Client(timeout=timeout, headers={"Accept": "application/json"})
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self) -> "KalshiClient":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
+    @retry(retry=retry_if_exception(_is_retryable), stop=stop_after_attempt(3),
+           wait=wait_exponential(min=1, max=10), reraise=True)
     def _get(self, path: str, params: dict) -> dict:
         response = self._client.get(f"{BASE_URL}{path}", params=params)
         response.raise_for_status()

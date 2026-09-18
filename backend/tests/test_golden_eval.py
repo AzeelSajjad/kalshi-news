@@ -1,4 +1,7 @@
+import json
 from pathlib import Path
+
+import pytest
 
 from app.eval.golden import load_golden_set, score
 
@@ -86,6 +89,22 @@ def test_predictions_on_negative_only_cases_score_zero_precision_not_a_crash():
     assert result.precision == 0.0
     assert result.recall == 1.0
     assert len(result.false_positives) == len(cases)
+
+
+def test_malformed_case_error_names_the_offending_case_id(tmp_path):
+    """GoldenCase(**case) on its own raises a bare TypeError about a missing
+    keyword argument, with nothing to say *which* of many hand-written cases
+    it came from. load_golden_set must name it."""
+    bad_set = tmp_path / "bad_golden_set.json"
+    bad_set.write_text(json.dumps([
+        {"id": "fed-cut-signal", "title": "t", "body": "b", "expected_tickers": ["FED-26SEP"]},
+        {"id": "broken-case", "title": "missing body field", "expected_tickers": []},
+    ]))
+
+    with pytest.raises(ValueError) as exc_info:
+        load_golden_set(bad_set)
+
+    assert "broken-case" in str(exc_info.value)
 
 
 def test_precision_and_recall_are_not_swapped_on_precision_regression():

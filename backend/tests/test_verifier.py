@@ -218,6 +218,27 @@ def test_provider_error_on_retry_raises_verification_error_with_first_attempts_t
     assert client.messages.create.call_count == 2
 
 
+def test_non_list_links_value_consumes_the_retry_instead_of_silently_returning_empty():
+    """{"links": "no relevant markets"} would otherwise iterate the string
+    character by character, reject each one-character "entry" as invalid,
+    and return an empty list *normally* -- so the retry is never consumed
+    and the post is billed for a call that silently produced nothing.
+    _parse_links now raises on a non-list value, routing it into the same
+    retry path a malformed-JSON response takes."""
+    non_list_payload = json.dumps({"links": "no relevant markets"})
+    client = _client_with_sequence(
+        _message(non_list_payload, input_tokens=700, output_tokens=150),
+        _message(RELATED_PAYLOAD, input_tokens=1200, output_tokens=300),
+    )
+
+    result = verify_candidates(POST, CANDIDATES, client=client)
+
+    assert client.messages.create.call_count == 2
+    assert [link.ticker for link in result.links] == ["GOVSHUT-26OCT"]
+    assert result.input_tokens == 700 + 1200
+    assert result.output_tokens == 150 + 300
+
+
 def test_provider_error_on_first_attempt_raises_verification_error_with_zero_tokens():
     client = MagicMock()
     client.messages.create.side_effect = RuntimeError("provider overloaded")

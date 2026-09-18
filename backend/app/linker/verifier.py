@@ -88,8 +88,16 @@ def _extract_json(raw: str) -> str:
 
 
 def _parse_links(payload: dict, valid_tickers: set[str]) -> list[VerifiedLink]:
+    entries = payload["links"]
+    if not isinstance(entries, list):
+        # {"links": "no relevant markets"} would otherwise iterate the string
+        # one character at a time, reject each one as an invalid entry, and
+        # return an empty list *normally* -- so the retry is never consumed
+        # and the post is billed for a call that silently produced nothing.
+        # Raising routes it into the caller's retry path instead.
+        raise TypeError(f"'links' must be a list, got {type(entries).__name__}")
     links: list[VerifiedLink] = []
-    for entry in payload["links"]:
+    for entry in entries:
         try:
             link = VerifiedLink(**entry)
         except (ValidationError, TypeError):

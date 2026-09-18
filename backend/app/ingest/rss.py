@@ -13,6 +13,15 @@ class RssIngestor:
     def __init__(self, timeout: float = 20.0):
         self._client = httpx.Client(timeout=timeout, follow_redirects=True)
 
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
     def fetch(self, source, since: datetime) -> list[RawPost]:
         response = self._client.get(source.feed_url)
         response.raise_for_status()

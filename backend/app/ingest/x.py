@@ -60,6 +60,15 @@ class XIngestor:
     def __init__(self, timeout: float = 15.0):
         self._client = httpx.Client(timeout=timeout, follow_redirects=True)
 
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
     def hydrate(self, tweet_id: str) -> RawPost | None:
         response = self._client.get(OEMBED_URL, params={
             "url": f"https://twitter.com/i/status/{tweet_id}",

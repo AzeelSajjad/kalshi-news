@@ -30,8 +30,22 @@ class EvalResult:
 
 
 def load_golden_set(path: Path) -> list[GoldenCase]:
+    """Parse the golden set, naming the offending case when one is malformed.
+
+    `GoldenCase(**case)` on its own raises a bare TypeError about a missing
+    or unexpected keyword argument, with nothing to say *which* of forty
+    hand-written cases it came from.
+    """
     raw = json.loads(Path(path).read_text())
-    return [GoldenCase(**case) for case in raw]
+    cases: list[GoldenCase] = []
+    for index, case in enumerate(raw):
+        label = case.get("id") if isinstance(case, dict) else None
+        label = label if label is not None else f"<no id, at index {index}>"
+        try:
+            cases.append(GoldenCase(**case))
+        except TypeError as exc:
+            raise ValueError(f"golden case {label!r} is malformed: {exc}") from exc
+    return cases
 
 
 def score(predictions: dict[str, set[str]], cases: list[GoldenCase]) -> EvalResult:
