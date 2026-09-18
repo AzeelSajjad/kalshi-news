@@ -1,7 +1,22 @@
 import Link from "next/link";
 
+// Derived from the seeded source registry, not from what a feed *could*
+// plausibly cover: backend/migrations/versions/0002_seed_sources.py is the
+// only thing that creates sources, and backend/app/jobs/ingest.py sets
+// post.category = source.category unconditionally, so the set of categories
+// a post can ever carry is exactly the set on enabled source rows.
+//
+// Enabled today: Politico Politics + Bloomberg Politics (Politics),
+// Politico Economy + CNBC Economy (Economics), Bloomberg Markets + CNBC Top
+// News (Finance), and the X source (World). Reuters and AP are the only
+// other World rows and are seeded disabled -- neither serves a public RSS
+// feed any more, so they are left disabled rather than re-enabled here.
+//
+// Crypto, Sports and Culture had no source behind them and rendered "No
+// stories yet" permanently. Adding a tab back means seeding a source for it
+// first.
 export const CATEGORIES = [
-  "Politics", "Economics", "Finance", "World", "Crypto", "Sports", "Culture",
+  "Politics", "Economics", "Finance", "World",
 ] as const;
 
 function tabClass(isActive: boolean) {

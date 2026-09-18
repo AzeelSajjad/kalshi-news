@@ -4,6 +4,25 @@ import { describe, expect, it } from "vitest";
 import { CATEGORIES, Header } from "./Header";
 
 describe("Header", () => {
+  // The seeded sources (backend/migrations/versions/0002_seed_sources.py)
+  // carry exactly four categories among rows with enabled=true: Politics,
+  // Economics and Finance from the RSS feeds, and World from the X source.
+  // backend/app/jobs/ingest.py sets post.category = source.category
+  // unconditionally, so a post can never carry any other value. A tab
+  // outside this list is permanently empty on the live site -- and the
+  // empty-state copy ("Nothing filed under X in the current window")
+  // promises transience for a state that never changes.
+  it("offers only categories a seeded, enabled source can actually produce", () => {
+    expect([...CATEGORIES]).toEqual(["Politics", "Economics", "Finance", "World"]);
+  });
+
+  it("offers no tab that can never be filled", () => {
+    render(<Header active={null} />);
+    for (const dead of ["Crypto", "Sports", "Culture"]) {
+      expect(screen.queryByRole("link", { name: dead })).toBeNull();
+    }
+  });
+
   it("renders a link per category, plus All", () => {
     render(<Header active={null} />);
     for (const category of CATEGORIES) {
