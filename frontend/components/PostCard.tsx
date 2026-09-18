@@ -1,17 +1,32 @@
 import Link from "next/link";
 
 import type { FeedItem } from "@/lib/types";
+import { truncate } from "@/lib/format";
 import { timeAgo } from "@/lib/time";
 import { MarketTag } from "./MarketTag";
+
+const SNIPPET_LENGTH = 180;
 
 export function PostCard({ item }: { item: FeedItem }) {
   const isX = item.source_kind === "x";
   const byline = isX ? item.author_handle : item.author_name?.toUpperCase();
+  // An X post's title already *is* the tweet text, so a snippet would print
+  // the same sentence twice.
+  const snippet = !isX && item.body ? truncate(item.body, SNIPPET_LENGTH) : null;
 
   return (
     <article className="mb-2.5 rounded-xl border border-border bg-surface px-4 py-3.5">
       <div className="mb-2 flex items-center gap-2 text-[11px] text-muted">
-        {isX && <span className="rounded bg-[#1D9BF0] px-1.5 font-bold text-white">𝕏</span>}
+        {/* This chip used to be old Twitter blue -- a brand colour X retired,
+            and off our palette besides. X's own mark is black, which is
+            invisible against our background, so the chip takes the same
+            neutral surface treatment as the +N sources and category chips
+            beside it. */}
+        {isX && (
+          <span className="rounded border border-border bg-surface-2 px-1.5 font-bold text-text">
+            𝕏
+          </span>
+        )}
         <span className="font-semibold tracking-wide text-text">{byline}</span>
         <span>· {timeAgo(item.published_at)}</span>
         {item.cluster_size > 1 && (
@@ -26,6 +41,11 @@ export function PostCard({ item }: { item: FeedItem }) {
 
       <Link href={`/posts/${item.id}`} className="block">
         <h2 className="text-[15px] font-semibold leading-snug">{item.title}</h2>
+        {snippet && (
+          <p data-testid="snippet" className="mt-1 text-[13px] leading-relaxed text-muted">
+            {snippet}
+          </p>
+        )}
       </Link>
 
       {item.markets.map((market) => (

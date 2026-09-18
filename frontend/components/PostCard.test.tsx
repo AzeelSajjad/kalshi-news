@@ -15,6 +15,7 @@ const NEWS: FeedItem = {
   category: "Politics",
   published_at: new Date(Date.now() - 60_000).toISOString(),
   cluster_size: 1,
+  body: "Congressional leaders left the room without a deal, according to two aides.",
   markets: [],
 };
 
@@ -50,5 +51,37 @@ describe("PostCard", () => {
     ] }} />);
     expect(screen.getByText("Market A?")).toBeInTheDocument();
     expect(screen.getByText("Market B?")).toBeInTheDocument();
+  });
+});
+
+// --- the snippet -----------------------------------------------------------
+//
+// Both specs put a snippet on the card. The shipped card was headline-only
+// and *could not* have one, because FeedItem carried no body -- a silent cut
+// rather than a recorded one. The body is now on the feed item.
+describe("PostCard snippet", () => {
+  it("shows the opening prose under the headline", () => {
+    render(<PostCard item={NEWS} />);
+    expect(screen.getByTestId("snippet"))
+      .toHaveTextContent("Congressional leaders left the room");
+  });
+
+  it("truncates a long body instead of printing the whole article", () => {
+    render(<PostCard item={{ ...NEWS, body: "word ".repeat(200) }} />);
+    const snippet = screen.getByTestId("snippet");
+    expect(snippet.textContent!.length).toBeLessThanOrEqual(180);
+    expect(snippet).toHaveTextContent(/…$/);
+  });
+
+  it("renders no snippet element for a post with no body", () => {
+    render(<PostCard item={{ ...NEWS, body: null }} />);
+    expect(screen.queryByTestId("snippet")).toBeNull();
+  });
+
+  // An X post's title already is the tweet text; repeating it as a snippet
+  // would render the same sentence twice.
+  it("renders no snippet for an X post", () => {
+    render(<PostCard item={{ ...NEWS, source_kind: "x", author_handle: "@a" }} />);
+    expect(screen.queryByTestId("snippet")).toBeNull();
   });
 });

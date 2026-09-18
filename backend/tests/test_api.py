@@ -346,3 +346,29 @@ def test_feed_does_not_n_plus_1_per_post(session):
     # eager-load, links+markets, clusters -- a handful of queries, never one
     # per post.
     assert query_count <= 6, f"expected a bounded query count, got {query_count}"
+
+
+def test_feed_items_carry_the_body_so_a_card_can_show_a_snippet(session):
+    """Both specs put a snippet on the feed card; FeedItem carried no body,
+    so the card *could not* have one and shipped headline-only. The body is
+    already loaded on the row -- withholding it from the feed response is
+    what made the snippet impossible."""
+    _seed(session)
+
+    items = TestClient(app).get("/api/feed").json()["items"]
+
+    assert items[0]["body"] == "Leadership walked out."
+
+
+def test_feed_item_body_is_null_for_a_post_that_has_none(session):
+    source = Source(kind="x", name="X", category="World")
+    session.add(source)
+    session.flush()
+    session.add(Post(source_id=source.id, external_id="t1", url="https://x.com/a",
+                     title="A tweet is its own body", body=None,
+                     category="World", published_at=NOW))
+    session.commit()
+
+    items = TestClient(app).get("/api/feed").json()["items"]
+
+    assert items[0]["body"] is None

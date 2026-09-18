@@ -50,3 +50,52 @@ def test_http_error_raises_so_the_caller_can_isolate_the_source():
 
     with pytest.raises(httpx.HTTPStatusError):
         RssIngestor().fetch(SOURCE, since=datetime(2026, 9, 1, tzinfo=UTC))
+
+
+# --- HTML in <description> -------------------------------------------------
+#
+# Politico, Bloomberg and CNBC all put markup in <description>. feedparser
+# returns it verbatim, and the frontend renders the stored body as a React
+# text node -- so unstripped markup shows up as literal "<p>" and
+# "<a href=...>" on the page. It also degrades the text the embedder sees.
+# Stripping belongs at ingest, so the stored body and the embedded text are
+# the same clean prose.
+
+HTML_FEED = (Path(__file__).parent / "fixtures" / "politico_html.xml").read_text()
+HTML_SOURCE = Source(id=2, kind="rss", name="Politico Politics",
+                     feed_url="https://example.com/politico-rss", category="Politics")
+
+
+@respx.mock
+def test_body_is_clean_prose_when_the_description_contains_markup():
+    respx.get(HTML_SOURCE.feed_url).mock(return_value=httpx.Response(200, text=HTML_FEED))
+
+    posts = RssIngestor().fetch(HTML_SOURCE, since=datetime(2026, 9, 1, tzinfo=UTC))
+
+    body = posts[0].body
+    assert body is not None
+    assert "<" not in body and ">" not in body, body
+    assert "href" not in body
+    assert "&mdash;" not in body and "&amp;" not in body
+    assert body == (
+        "Congressional leaders left the room without a deal, according to two aides. "
+        "A shutdown now looks likely — the deadline is Sept 30."
+    )
+
+
+@respx.mock
+def test_original_markup_is_preserved_for_tweet_discovery():
+    """Stripping tags removes hrefs, and an href is where tweet URLs live.
+
+    The ingest job scans article markup for x.com/status links; if the only
+    text it ever sees is stripped prose, the entire X ingestion path goes
+    silently dead. The unstripped source is carried alongside the clean body
+    for that one purpose.
+    """
+    from app.ingest.x import extract_tweet_ids
+
+    respx.get(HTML_SOURCE.feed_url).mock(return_value=httpx.Response(200, text=HTML_FEED))
+
+    posts = RssIngestor().fetch(HTML_SOURCE, since=datetime(2026, 9, 1, tzinfo=UTC))
+
+    assert extract_tweet_ids(posts[1].raw_html or "") == ["1839000000000000005"]

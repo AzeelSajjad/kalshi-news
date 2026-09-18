@@ -1,4 +1,5 @@
 import type { TrendingMarket, TrendingPage } from "@/lib/types";
+import { cents } from "@/lib/format";
 
 function formatVolume(volume: number): string {
   if (volume >= 1_000_000) {
@@ -18,7 +19,7 @@ function Row({ market, showCoverage }: { market: TrendingMarket; showCoverage?: 
       <div className="mb-2 text-[13px] font-semibold leading-snug">{market.title}</div>
       <div className="flex items-center justify-between text-[10.5px] text-muted">
         {market.yes_price !== null && (
-          <span className="font-bold text-mint">YES {market.yes_price}¢</span>
+          <span className="font-bold text-mint">YES {cents(market.yes_price)}</span>
         )}
         {showCoverage
           ? <span>{market.post_count} post{market.post_count === 1 ? "" : "s"}</span>

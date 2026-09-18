@@ -27,11 +27,18 @@ class FeedItem(BaseModel):
     category: str | None
     published_at: datetime
     cluster_size: int
+    # The article's opening prose, stripped of markup at ingest. Carried on
+    # the feed item so a card can show a snippet without a second request;
+    # the frontend decides how much of it to show. None for X posts, whose
+    # title already is the text.
+    body: str | None
     markets: list[MarketRef]
 
 
 class PostDetail(FeedItem):
-    body: str | None
+    """Currently identical to FeedItem. Kept as its own response model
+    because /api/posts/{id} is where any field too heavy for a 30-item page
+    would go."""
 
 
 class TrendingMarket(BaseModel):

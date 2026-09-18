@@ -5,10 +5,17 @@ articles and X posts, links each one to the prediction markets it bears on
 with a YES/NO direction and a plain-English rationale, tracks how those
 markets moved afterwards, and serves the result over a read API.
 
-This repository is the backend. The design lives in
+Two parts: a Python pipeline and read API in `backend/`, and a
+server-rendered Next.js frontend in `frontend/`. The browser never contacts
+the backend directly — Server Components fetch at render time and one thin
+route handler proxies pagination.
+
+The designs live in
 [`docs/superpowers/specs/2026-09-17-kalshi-news-design.md`](docs/superpowers/specs/2026-09-17-kalshi-news-design.md)
-and the implementation plan in
-[`docs/superpowers/plans/2026-09-17-backend-pipeline.md`](docs/superpowers/plans/2026-09-17-backend-pipeline.md).
+(the pipeline) and
+[`docs/superpowers/specs/2026-09-18-frontend-and-deploy-design.md`](docs/superpowers/specs/2026-09-18-frontend-and-deploy-design.md)
+(the frontend and the deploy path), with their implementation plans beside
+them in `docs/superpowers/plans/`.
 
 ## Architecture
 
@@ -40,7 +47,7 @@ logged-in session.
 ## Requirements
 
 Python 3.11 and a Postgres database with the `vector` (pgvector) extension
-available.
+available, for the backend. Node 22 for the frontend.
 
 ## Environment variables
 
@@ -54,7 +61,7 @@ available.
 
 `backend/.env.example` has a working local set.
 
-## Running it
+## Running the backend
 
 From `backend/`:
 
@@ -72,6 +79,61 @@ Reuters and AP are seeded **disabled** — as of 2026-09-17 neither serves a
 public RSS feed any more (`feeds.reuters.com` was retired; `apnews.com`
 answers feed URLs with a bot challenge). Politico, Bloomberg and CNBC are
 seeded enabled and verified working. Re-enabling either is a one-row `UPDATE`.
+
+## The frontend
+
+A Next.js 15 App Router application (React 19, TypeScript strict, Tailwind
+v4), server-rendered with 60-second ISR. From `frontend/`:
+
+```bash
+npm install
+npm run dev            # http://localhost:3000
+```
+
+It needs one environment variable, `BACKEND_API_URL`, pointing at the
+backend — server-side only, never exposed to the browser.
+`frontend/.env.example` has a working local set.
+
+The site carries **no product name**. The header is category tabs at the
+left and a Kalshi attribution link at the right; it must never present
+itself as Kalshi. The category tabs are derived from the categories the
+seeded sources actually produce (`Politics`, `Economics`, `Finance`,
+`World`) — adding a tab means seeding a source for it first, or it renders
+empty forever.
+
+### Frontend tests
+
+```bash
+cd frontend
+npm test               # Vitest + React Testing Library
+npm run typecheck      # tsc --noEmit
+npm run build
+npx playwright test    # one smoke test against a stubbed backend
+```
+
+`npm run build` must be run before `npx playwright test` is meaningful --
+Playwright starts `npm run start`, which serves the last build.
+
+The suite splits three ways, because Server Components resist unit testing
+rather than because three tools are better than one:
+
+| Layer | Tool | What it covers |
+|---|---|---|
+| Presentational components | Vitest + React Testing Library | Props in, DOM out — market tags, cards, the header, the empty state |
+| Modules that fetch | Vitest + MSW | `lib/api.ts` and the `/api/feed` route handler, called directly with a `Request` |
+| The intercepting-route wiring | Playwright | One test: clicking a card opens the overlay over a still-mounted feed |
+
+**No test makes a live network call**, matching the backend's socket guard:
+every HTTP call is intercepted by MSW, and Playwright runs against
+`e2e/stub-backend.mjs`, a local process serving fixed JSON.
+
+Two mechanical guards exist because the corresponding rules were prose that
+a review had to enforce by hand: `lib/palette.test.ts` fails on any colour
+outside the palette tokens, and `lib/format.test.ts` fails if a price is
+formatted anywhere but `lib/format.ts`.
+
+Frontend CI runs as its own job beside the backend's, so a broken frontend
+fails the same pipeline.
 
 ## Deploy
 
@@ -115,7 +177,7 @@ an API.
 > goes stale. Push a commit (or re-enable the workflow from the Actions tab)
 > to restart it.
 
-## Tests
+## Backend tests
 
 From `backend/`:
 

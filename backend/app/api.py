@@ -157,10 +157,9 @@ def _assemble_items(
             category=post.category,
             published_at=post.published_at,
             cluster_size=cluster_sizes.get(post.cluster_id, 1),
+            body=post.body,
             markets=market_refs.get(post.id, []),
         )
-        if model is PostDetail:
-            payload["body"] = post.body
         items.append(model(**payload))
     return items
 

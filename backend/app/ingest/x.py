@@ -1,10 +1,9 @@
-import html as html_lib
 import re
 from datetime import UTC, datetime
 
 import httpx
 
-from app.ingest.base import RawPost
+from app.ingest.base import RawPost, strip_html
 
 OEMBED_URL = "https://publish.twitter.com/oembed"
 
@@ -13,7 +12,6 @@ OEMBED_URL = "https://publish.twitter.com/oembed"
 TWITTER_EPOCH_MS = 1288834974657
 
 _STATUS_RE = re.compile(r"https?://(?:www\.)?(?:twitter|x)\.com/[^/\s\"']+/status/(\d+)")
-_TAG_RE = re.compile(r"<[^>]+>")
 _TRAILING_ATTRIB_RE = re.compile(r"&mdash;.*$", re.DOTALL)
 
 
@@ -46,9 +44,13 @@ def snowflake_created_at(tweet_id: str) -> datetime | None:
 
 
 def _tweet_text(embed_html: str) -> str:
-    text = _TRAILING_ATTRIB_RE.sub("", embed_html or "")
-    text = _TAG_RE.sub(" ", text)
-    return " ".join(html_lib.unescape(text).split())
+    """oEmbed's blockquote, minus the trailing "&mdash; Author (@handle)" byline.
+
+    The byline removal is oEmbed-specific; everything after it is the
+    ingest-wide strip_html, shared with the RSS ingestor so both store the
+    same kind of clean prose.
+    """
+    return strip_html(_TRAILING_ATTRIB_RE.sub("", embed_html or ""))
 
 
 class XIngestor:
