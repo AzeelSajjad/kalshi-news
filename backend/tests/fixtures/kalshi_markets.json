@@ -1,0 +1,31 @@
+{
+  "markets": [
+    {
+      "ticker": "FED-26SEP",
+      "event_ticker": "FED",
+      "series_ticker": "FED",
+      "title": "Fed cuts in September?",
+      "rules_primary": "Resolves YES if the Federal Reserve lowers the target rate.",
+      "category": "Economics",
+      "status": "active",
+      "close_time": "2026-09-30T20:00:00Z",
+      "yes_bid": 71,
+      "yes_ask": 73,
+      "volume": 5100000
+    },
+    {
+      "ticker": "GOVSHUT-26OCT",
+      "event_ticker": "GOVSHUT",
+      "series_ticker": "GOVSHUT",
+      "title": "Government shutdown before Oct 15?",
+      "rules_primary": "Resolves YES on a funding lapse before the deadline.",
+      "category": "Politics",
+      "status": "active",
+      "close_time": "2026-10-15T20:00:00Z",
+      "yes_bid": 63,
+      "yes_ask": 65,
+      "volume": 2400000
+    }
+  ],
+  "cursor": ""
+}
