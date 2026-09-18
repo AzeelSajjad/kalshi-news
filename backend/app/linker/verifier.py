@@ -47,6 +47,20 @@ class VerificationResult:
     output_tokens: int
 
 
+class VerificationError(Exception):
+    """Raised when the Anthropic call itself fails (outage, timeout, overload).
+
+    Carries the token counts already billed by earlier attempts in this call
+    (zero if the very first attempt failed) so the caller can still record
+    the spend for a call that was charged but never returned a result.
+    """
+
+    def __init__(self, message: str, input_tokens: int, output_tokens: int):
+        super().__init__(message)
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+
+
 def _prompt(post, candidates: list[Candidate]) -> str:
     lines = [f"NEWS ITEM\nSource: {post.author_name}\nHeadline: {post.title}"]
     if post.body:
@@ -95,12 +109,23 @@ def verify_candidates(post, candidates: list[Candidate], client=None) -> Verific
     total_input_tokens = 0
     total_output_tokens = 0
     for attempt in range(2):
-        message = client.messages.create(
-            model=MODEL,
-            max_tokens=2048,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        try:
+            message = client.messages.create(
+                model=MODEL,
+                max_tokens=2048,
+                system=SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception as exc:
+            # The tokens already accumulated from earlier attempts in this
+            # call are real, billed charges -- pass them along so the caller
+            # can still record the spend even though this call never
+            # returns a VerificationResult.
+            raise VerificationError(
+                f"anthropic request failed on attempt {attempt + 1}: {exc}",
+                total_input_tokens,
+                total_output_tokens,
+            ) from exc
         total_input_tokens += message.usage.input_tokens
         total_output_tokens += message.usage.output_tokens
         try:
